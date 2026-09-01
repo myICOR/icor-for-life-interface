@@ -241,3 +241,59 @@ test('unload releases every row it claimed', async () => {
   assert.equal(tree.querySelectorAll('[data-icor-managed]').length, 0, 'a claimed row outlived the plugin');
   assert.equal(row(tree, 'Notes').style.cssText, '', 'inline properties outlived the plugin');
 });
+
+/* ------------------------------------------------------------- scaffold -- */
+
+test('the scaffold list resolves rooms by prefix, so a renamed room is still listed', async () => {
+  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Scratchpad', '04 Somewhere Else', '04 Somewhere Else/Journal', '06 AI Team', 'Notes'] });
+  await plugin.onload(); ready();
+  const rows = plugin.constructor.resolveScaffold(plugin.app);
+  const paths = rows.map((r) => r.path);
+  assert.ok(paths.includes('04 Somewhere Else'), `the renamed Inner World room is not listed: ${paths}`);
+  assert.ok(paths.includes('04 Somewhere Else/Journal'), 'the Journal subfolder under the renamed room is not listed');
+  assert.ok(!paths.some((p) => p.startsWith('05 ')), 'a room that does not exist in this vault was listed anyway');
+  const inner = rows.find((r) => r.path === '04 Somewhere Else');
+  assert.equal(inner.defaults.kind, 'room');
+  assert.equal(inner.defaults.color, '#7d9a7f', 'Inner World does not show the theme\'s own green');
+  assert.equal(inner.defaults.icon, 'sprout');
+  assert.equal(inner.defaults.label, 'Inner World');
+});
+
+test('editing a scaffold folder stores an override starting from the theme\'s values', async () => {
+  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['04 Inner World', '04 Inner World/Journal', '00 Daily Scratchpad', '06 AI Team'] });
+  await plugin.onload(); ready();
+  const rows = plugin.constructor.resolveScaffold(plugin.app);
+  const journal = rows.find((r) => r.path === '04 Inner World/Journal');
+  await plugin.overrideFolder(journal.defaults, { color: '#ff0000' });
+
+  const stored = savedData.value.folders.find((f) => f.path === '04 Inner World/Journal');
+  assert.ok(stored, 'no override was stored');
+  assert.equal(stored.color, '#ff0000', 'the change was not stored');
+  assert.equal(stored.icon, 'notebook-pen', 'the override lost the theme\'s icon; changing one thing changed two');
+  assert.equal(stored.colorPaper, '#7f662f', 'the override lost the theme\'s paper colour');
+  const r = row(tree, '04 Inner World/Journal');
+  assert.equal(r.getAttribute('data-icor-kind'), 'family', 'the row was not claimed after the override');
+  assert.equal(r.style.getPropertyValue('--room-color'), '#ff0000');
+});
+
+test('resetting a scaffold folder removes the override and releases the row to the theme', async () => {
+  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['04 Inner World', '00 Daily Scratchpad', '06 AI Team'] });
+  await plugin.onload(); ready();
+  const inner = plugin.constructor.resolveScaffold(plugin.app).find((r) => r.path === '04 Inner World');
+  await plugin.overrideFolder(inner.defaults, { icon: 'heart' });
+  assert.ok(row(tree, '04 Inner World').hasAttribute('data-icor-kind'), 'not claimed to begin with');
+
+  await plugin.resetFolder('04 Inner World');
+  assert.equal(savedData.value.folders.length, 0, 'the override survived the reset');
+  const r = row(tree, '04 Inner World');
+  assert.ok(!r.hasAttribute('data-icor-kind'), 'the row was not released to the theme');
+  assert.equal(r.style.cssText, '', 'inline properties survived the reset');
+});
+
+test('only what the user changed is stored: an untouched scaffold list stores nothing', async () => {
+  const { plugin, ready, savedData } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  plugin.constructor.resolveScaffold(plugin.app);
+  assert.ok(!savedData.value || !savedData.value.folders || savedData.value.folders.length === 0,
+    'listing the scaffold wrote overrides for it; the theme is the source of truth and the plugin must store only changes');
+});

@@ -86,6 +86,52 @@ const PALETTE = [
   { key: 'indigo',     name: 'Indigo (AI Team)',          ink: '#8087a6', paper: '#565e7e' },
 ];
 
+/* THE ICOR FOR LIFE SCAFFOLD, as the theme styles it. Listed so a member can
+ * see what the theme does to each of these folders and change any of it from
+ * here. This table is DISPLAY DATA: the theme renders these rooms on its own
+ * and reads nothing from this list. It exists so the settings tab can show a
+ * true picture before the user touches anything, and so an edit starts from
+ * the right values rather than from blanks.
+ *
+ * Rooms are keyed on their numeric prefix, subfolders on the room plus their
+ * own name, resolved against the live vault - because that is how the theme
+ * keys them, and a room Tom renamed to "04 Somewhere Else" is still the
+ * Inner World room. Icons are the Lucide ids the theme's glyphs were drawn
+ * from, matched by path data on 2026-09-01. */
+const SCAFFOLD = [
+  { room: '00', kind: 'room', hue: 'yellow',     icon: 'pencil',         label: 'Daily Scratchpad' },
+  { room: '01', kind: 'room', hue: 'terracotta', icon: 'inbox',          label: 'Inbox' },
+  { room: '02', kind: 'room', hue: 'marker',     icon: 'calendar-range', label: 'Planner' },
+  { room: '03', kind: 'room', hue: 'cyan',       icon: 'hammer',         label: 'WiP' },
+  { room: '04', kind: 'room', hue: 'success',    icon: 'sprout',         label: 'Inner World' },
+  { room: '05', kind: 'room', hue: 'burgundy',   icon: 'package',        label: 'Assets' },
+  { room: '06', kind: 'room', hue: 'indigo',     icon: 'bot',            label: 'AI Team' },
+  { room: '01', sub: 'Outer World',       kind: 'family', hue: 'terracotta', icon: 'globe' },
+  { room: '01', sub: 'Scanner Inbox',     kind: 'family', hue: 'terracotta', icon: 'scan-line' },
+  { room: '04', sub: 'Contacts',          kind: 'family', hue: 'cyan',       icon: 'users' },
+  { room: '04', sub: 'Journal',           kind: 'family', hue: 'yellow',     icon: 'notebook-pen' },
+  { room: '04', sub: 'My Life',           kind: 'family', hue: 'success',    icon: 'heart' },
+  { room: '04', sub: 'Goals',             kind: 'family', hue: 'terracotta', icon: 'target' },
+  { room: '04', sub: 'Habits',            kind: 'family', hue: 'indigo',     icon: 'repeat' },
+  { room: '04', sub: 'Key Elements',      kind: 'family', hue: 'burgundy',   icon: 'landmark' },
+  { room: '04', sub: 'Projects',          kind: 'family', hue: 'cyan',       icon: 'folder-kanban' },
+  { room: '04', sub: 'Topics',            kind: 'family', hue: 'yellow',     icon: 'library' },
+  { room: '05', sub: 'Images',            kind: 'family', hue: 'burgundy',   icon: 'image' },
+  { room: '05', sub: 'Audio',             kind: 'family', hue: 'burgundy',   icon: 'music' },
+  { room: '05', sub: 'Documents',         kind: 'family', hue: 'burgundy',   icon: 'file-text' },
+  { room: '06', sub: 'AI Team Knowledge', kind: 'family', hue: 'indigo',     icon: 'book-open' },
+  { room: '06', sub: 'Agents',            kind: 'family', hue: 'indigo',     icon: 'users' },
+  { room: '06', sub: 'AI Sessions',       kind: 'family', hue: 'indigo',     icon: 'messages-square' },
+  { room: '06', sub: 'Workstreams',       kind: 'family', hue: 'indigo',     icon: 'workflow' },
+  { room: '06', sub: 'SOPs',              kind: 'family', hue: 'indigo',     icon: 'clipboard-list' },
+  { room: '06', sub: 'Guidelines',        kind: 'family', hue: 'indigo',     icon: 'book-marked' },
+  { room: '06', sub: 'Scripts',           kind: 'family', hue: 'indigo',     icon: 'code' },
+  { room: '06', sub: 'Tasks',             kind: 'family', hue: 'indigo',     icon: 'square-check-big' },
+  { room: '06', sub: 'Session Logs',      kind: 'family', hue: 'indigo',     icon: 'history' },
+  { room: '06', sub: 'Avatars',           kind: 'family', hue: 'indigo',     icon: 'circle-user' },
+  { room: '06', sub: 'Brand',             kind: 'family', hue: 'indigo',     icon: 'infinity' },
+];
+
 const KINDS = [
   ['room', 'Room - a block with a coloured edge, no arrow, its own label'],
   ['family', 'Family - coloured name and a small icon'],
@@ -118,7 +164,7 @@ const PROPS = ['--room-color', '--room-color-paper', '--room-icon', '--room-labe
  * `stroke="currentColor"` has no colour to inherit inside a data URI, so it is
  * pinned to black; a mask reads alpha, and any opaque colour will do. */
 function iconUrl(iconId) {
-  const svg = getIcon(iconId);
+  const svg = getIcon(iconId) || getIcon(`lucide-${iconId}`) || getIcon(String(iconId).replace(/^lucide-/, ''));
   if (!svg) return null;
   const el = svg.cloneNode(true);
   el.removeAttribute('class');
@@ -252,6 +298,26 @@ class IcorInterfacePlugin extends Plugin {
     for (const p of PROPS) row.style.removeProperty(p);
   }
 
+  /* An edit to a scaffold folder becomes an override: the theme keeps drawing
+     the rest of the scaffold, and this row is now the plugin's. Starting from
+     the theme's own values, so changing one thing changes one thing. */
+  async overrideFolder(defaults, patch) {
+    let cfg = this.settings.folders.find((f) => f.path === defaults.path);
+    if (!cfg) {
+      cfg = Object.assign({}, defaults);
+      this.settings.folders.push(cfg);
+    }
+    Object.assign(cfg, patch);
+    await this.saveSettings();
+    return cfg;
+  }
+
+  async resetFolder(path) {
+    const i = this.settings.folders.findIndex((f) => f.path === path);
+    if (i >= 0) this.settings.folders.splice(i, 1);
+    await this.saveSettings();
+  }
+
   /* The label a room shows when the user gave none: the folder's own name
      with a leading sort prefix ("00 ", "06 ") taken off, which is what the
      theme's defaults do for the ICOR rooms. */
@@ -259,6 +325,48 @@ class IcorInterfacePlugin extends Plugin {
     const name = path.split('/').pop();
     return name.replace(/^\d{2}\s+/, '');
   }
+}
+
+/* ----------------------------------------------------- the scaffold list -- */
+
+/* Resolve every SCAFFOLD entry against the live vault: the room is the root
+ * folder whose name starts with the prefix, the subfolder is the first folder
+ * of that name anywhere under it (the theme keys subfolders on their own
+ * name, at any depth). Entries whose folder does not exist are left out - a
+ * settings row for a folder that is not there is a row that does nothing. */
+function isFolder(node) { return node instanceof TFolder || Array.isArray(node.children); }
+
+function resolveScaffold(app) {
+  const root = app.vault.getRoot && app.vault.getRoot();
+  if (!root || !root.children) return [];
+  const rooms = new Map();
+  for (const child of root.children) {
+    if (!isFolder(child)) continue;
+    const m = /^(\d{2}) /.exec(child.name);
+    if (m && !rooms.has(m[1])) rooms.set(m[1], child);
+  }
+  const findSub = (folder, name) => {
+    for (const child of folder.children || []) {
+      if (!isFolder(child)) continue;
+      if (child.name === name) return child;
+      const deeper = findSub(child, name);
+      if (deeper) return deeper;
+    }
+    return null;
+  };
+  const out = [];
+  for (const entry of SCAFFOLD) {
+    const room = rooms.get(entry.room);
+    if (!room) continue;
+    const folder = entry.sub ? findSub(room, entry.sub) : room;
+    if (!folder) continue;
+    const hue = PALETTE.find((p) => p.key === entry.hue);
+    out.push({
+      path: folder.path,
+      defaults: { path: folder.path, kind: entry.kind, color: hue.ink, colorPaper: hue.paper, icon: entry.icon, label: entry.label || '' },
+    });
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------- pickers -- */
@@ -331,100 +439,123 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         .setDesc('Find the same five under Settings, Style Settings, ICOR for Life - INKLINE. This plugin steps aside so the two never disagree.');
       return;
     }
-
     for (const s of SWITCHES) {
-      new Setting(containerEl)
-        .setName(s.name)
-        .setDesc(s.desc)
-        .addToggle((t) => t
-          .setValue(!!this.plugin.settings[s.key])
-          .onChange(async (v) => {
-            this.plugin.settings[s.key] = v;
-            await this.plugin.saveSettings();
-          }));
+      if (s.key === 'roomsOff') continue;   /* lives with the folders */
+      this.renderSwitch(containerEl, s);
     }
+  }
+
+  renderSwitch(containerEl, s) {
+    new Setting(containerEl)
+      .setName(s.name)
+      .setDesc(s.desc)
+      .addToggle((t) => t
+        .setValue(!!this.plugin.settings[s.key])
+        .onChange(async (v) => {
+          this.plugin.settings[s.key] = v;
+          await this.plugin.saveSettings();
+        }));
   }
 
   renderFolders(containerEl) {
     new Setting(containerEl).setName('Folders').setHeading();
+
+    /* The master switch sits with what it switches. */
+    if (!this.plugin.styleSettingsActive()) {
+      this.renderSwitch(containerEl, SWITCHES.find((s) => s.key === 'roomsOff'));
+    }
+
+    /* --- the scaffold, as the theme draws it, editable --- */
+    const scaffold = resolveScaffold(this.app);
+    if (scaffold.length) {
+      new Setting(containerEl).setName('ICOR for Life - Scaffold').setHeading();
+      new Setting(containerEl)
+        .setDesc('The folders the INKLINE theme styles on its own, with the colour and icon it gives each. Change any of them here; the change is stored, the theme keeps drawing the rest. Reset returns a folder to the theme.');
+      for (const { path, defaults } of scaffold) {
+        const override = this.plugin.folderConfig(path);
+        this.renderRow(containerEl, override || defaults, {
+          isOverride: !!override,
+          onChange: (patch) => this.plugin.overrideFolder(defaults, patch),
+          onReset: () => this.plugin.resetFolder(path),
+        });
+      }
+    }
+
+    /* --- the user's own additions --- */
+    new Setting(containerEl).setName('Your folders').setHeading();
     new Setting(containerEl)
-      .setDesc("ICOR for Life's seven rooms and their subfolders are styled by the INKLINE theme on their own. Add a folder here to give any folder a colour and an icon, or to change one of the theme's. Only what you add is stored.")
+      .setDesc('Give any other folder a colour and an icon.')
       .addButton((b) => b
         .setButtonText('Add folder')
         .setCta()
         .onClick(async () => {
-          this.plugin.settings.folders.push({ path: '', kind: 'family', color: PALETTE[4].ink, colorPaper: PALETTE[4].paper, icon: 'lucide-folder', label: '' });
+          this.plugin.settings.folders.push({ path: '', kind: 'family', color: PALETTE[4].ink, colorPaper: PALETTE[4].paper, icon: 'folder', label: '' });
           await this.plugin.saveSettings();
           this.display();
         }));
 
-    this.plugin.settings.folders.forEach((cfg, index) => this.renderFolder(containerEl, cfg, index));
+    const scaffoldPaths = new Set(scaffold.map((s) => s.path));
+    for (const cfg of this.plugin.settings.folders) {
+      if (scaffoldPaths.has(cfg.path)) continue;   /* shown above, in its place */
+      this.renderRow(containerEl, cfg, {
+        isOverride: true,
+        editablePath: true,
+        onChange: async (patch) => { Object.assign(cfg, patch); await this.plugin.saveSettings(); },
+        onReset: async () => {
+          this.plugin.settings.folders.splice(this.plugin.settings.folders.indexOf(cfg), 1);
+          await this.plugin.saveSettings();
+        },
+      });
+    }
   }
 
-  renderFolder(containerEl, cfg, index) {
-    const save = async () => { await this.plugin.saveSettings(); };
-    const box = containerEl.createDiv({ cls: 'icor-if-folder' });
+  /* One row per folder, the same for a scaffold folder and a user's own:
+     name, kind, icon, hue or two colours, and a reset. Rooms get a second
+     line for the label. `onChange` receives a patch; the caller decides
+     whether that patch becomes an override or edits an existing entry. */
+  renderRow(containerEl, cfg, { isOverride, editablePath = false, onChange, onReset }) {
+    const box = containerEl.createDiv({ cls: 'icor-if-folder' + (isOverride ? ' is-override' : '') });
+    const change = async (patch) => { await onChange(patch); this.display(); };
 
-    /* row 1: the folder itself, its kind, and the delete */
     const head = new Setting(box)
       .setName(cfg.path || 'New folder')
-      .addText((t) => {
-        t.setPlaceholder('Folder path, e.g. 03 WiP/Clients')
-          .setValue(cfg.path)
-          .onChange(async (v) => { cfg.path = v.trim(); await save(); head.setName(cfg.path || 'New folder'); });
-        new FolderSuggest(this.app, t.inputEl, async (path) => { cfg.path = path; await save(); head.setName(path); });
-      })
-      .addDropdown((d) => {
-        for (const [k, label] of KINDS) d.addOption(k, label);
-        d.setValue(cfg.kind || 'family')
-          .onChange(async (v) => { cfg.kind = v; await save(); this.display(); });
-      })
-      .addExtraButton((b) => b
-        .setIcon('trash-2')
-        .setTooltip('Remove')
-        .onClick(async () => {
-          this.plugin.settings.folders.splice(index, 1);
-          await save();
-          this.display();
-        }));
+      .setDesc(isOverride ? (editablePath ? '' : 'Changed from the theme') : 'As the theme draws it');
 
-    if (cfg.kind === 'none') return;
+    if (editablePath) {
+      head.addText((t) => {
+        t.setPlaceholder('Folder path, e.g. 03 WiP/Clients').setValue(cfg.path)
+          .onChange(async (v) => { await onChange({ path: v.trim() }); head.setName(v.trim() || 'New folder'); });
+        new FolderSuggest(this.app, t.inputEl, async (path) => { await onChange({ path }); head.setName(path); });
+      });
+    }
 
-    /* row 2: colour - a palette pick fills both rooms, the pickers take anything */
-    new Setting(box)
-      .setName('Colour')
-      .setDesc('Pick one of the seven ICOR hues, or set the ink and paper colours yourself.')
-      .addDropdown((d) => {
-        d.addOption('', 'Custom');
-        for (const p of PALETTE) d.addOption(p.key, p.name);
-        const current = PALETTE.find((p) => p.ink === cfg.color && p.paper === cfg.colorPaper);
-        d.setValue(current ? current.key : '')
-          .onChange(async (v) => {
-            const p = PALETTE.find((x) => x.key === v);
-            if (p) { cfg.color = p.ink; cfg.colorPaper = p.paper; await save(); this.display(); }
-          });
-      })
-      .addColorPicker((c) => c
-        .setValue(cfg.color || '#888888')
-        .onChange(async (v) => { cfg.color = v; await save(); }))
-      .addColorPicker((c) => c
-        .setValue(cfg.colorPaper || cfg.color || '#888888')
-        .onChange(async (v) => { cfg.colorPaper = v; await save(); }));
-
-    /* row 3: icon */
-    const iconRow = new Setting(box)
-      .setName('Icon')
-      .setDesc(cfg.icon ? cfg.icon.replace(/^lucide-/, '') : 'None chosen');
-    iconRow.addExtraButton((b) => {
-      b.setIcon(cfg.icon || 'folder').setTooltip('Choose an icon');
-      b.onClick(() => new IconPicker(this.app, async (id) => {
-        cfg.icon = id;
-        await save();
-        this.display();
-      }).open());
+    head.addExtraButton((b) => {
+      b.setIcon(cfg.icon || 'folder').setTooltip(`Icon: ${cfg.icon || 'none'}`);
+      b.onClick(() => new IconPicker(this.app, (id) => change({ icon: id.replace(/^lucide-/, '') })).open());
     });
 
-    /* row 4: label, rooms only */
+    head.addDropdown((d) => {
+      d.addOption('', 'Custom colour');
+      for (const p of PALETTE) d.addOption(p.key, p.name);
+      const current = PALETTE.find((p) => p.ink === cfg.color && p.paper === cfg.colorPaper);
+      d.setValue(current ? current.key : '')
+        .onChange((v) => { const p = PALETTE.find((x) => x.key === v); if (p) change({ color: p.ink, colorPaper: p.paper }); });
+    });
+    head.addColorPicker((c) => c.setValue(cfg.color || '#888888').onChange((v) => onChange({ color: v })));
+    head.addColorPicker((c) => c.setValue(cfg.colorPaper || cfg.color || '#888888').onChange((v) => onChange({ colorPaper: v })));
+
+    head.addDropdown((d) => {
+      for (const [k, label] of KINDS) d.addOption(k, label.split(' - ')[0]);
+      d.setValue(cfg.kind || 'family').onChange((v) => change({ kind: v }));
+    });
+
+    if (isOverride) {
+      head.addExtraButton((b) => b
+        .setIcon(editablePath ? 'trash-2' : 'rotate-ccw')
+        .setTooltip(editablePath ? 'Remove' : 'Reset to the theme')
+        .onClick(async () => { await onReset(); this.display(); }));
+    }
+
     if (cfg.kind === 'room') {
       new Setting(box)
         .setName('Label')
@@ -432,9 +563,12 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         .addText((t) => t
           .setPlaceholder(this.plugin.defaultLabel(cfg.path || ''))
           .setValue(cfg.label || '')
-          .onChange(async (v) => { cfg.label = v; await save(); }));
+          .onChange((v) => onChange({ label: v })));
     }
   }
 }
+
+/* Reachable for the gates; not a supported surface for other plugins. */
+IcorInterfacePlugin.resolveScaffold = resolveScaffold;
 
 module.exports = IcorInterfacePlugin;
