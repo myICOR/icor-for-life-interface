@@ -514,7 +514,10 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
      line for the label. `onChange` receives a patch; the caller decides
      whether that patch becomes an override or edits an existing entry. */
   renderRow(containerEl, cfg, { isOverride, editablePath = false, onChange, onReset }) {
-    const box = containerEl.createDiv({ cls: 'icor-if-folder' + (isOverride ? ' is-override' : '') });
+    /* No wrapper element. INKLINE draws a settings section as one card from
+       a RUN OF SIBLING rows; a div around each row breaks the run and every
+       row becomes its own card. Rows go straight into the container. */
+    const box = containerEl;
     const change = async (patch) => { await onChange(patch); this.display(); };
 
     const head = new Setting(box)

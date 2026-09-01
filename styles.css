@@ -2,13 +2,6 @@
    Everything this plugin does to the vault is drawn by the INKLINE theme;
    this file styles the controls that edit it. */
 
-/* One folder per row, no box around it: the list reads as a list. */
-.icor-if-folder .setting-item {
-  border-top: none;
-  padding-top: 6px;
-  padding-bottom: 6px;
-}
-
 .icor-if-icon-suggestion {
   display: flex;
   align-items: center;
