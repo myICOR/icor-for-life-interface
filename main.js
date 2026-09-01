@@ -18,7 +18,7 @@
  *      outright, by the ordinary cascade: inline beats stylesheet, and
  *      nothing here needs `!important` or a copy of the theme's rules.
  *
- * THE DEFAULTS ARE NOT HERE. The seven ICOR rooms and their subfolders are
+ * THE DEFAULTS ARE NOT HERE. The eight ICOR rooms and their subfolders are
  * styled by the theme with no help from this plugin, and this plugin holds
  * only what the user CHANGED. Copying the theme's defaults into a second
  * file would make two places that have to agree, and the copy that gets
@@ -72,7 +72,7 @@ const SWITCHES = [
   },
 ];
 
-/* INKLINE's seven room hues, ink and paper. Offered as a palette so a folder
+/* INKLINE's eight room hues, ink and paper. Offered as a palette so a folder
  * can join the family in one pick; the colour picker beside it takes anything
  * else. These are the theme's own values, kept here as a convenience and
  * never as the source: the theme renders its rooms without reading this. */
@@ -84,6 +84,7 @@ const PALETTE = [
   { key: 'success',    name: 'Green (Inner World)',       ink: '#7d9a7f', paper: '#5e7a60' },
   { key: 'burgundy',   name: 'Burgundy (Assets)',         ink: '#a87795', paper: '#7c5570' },
   { key: 'indigo',     name: 'Indigo (AI Team)',          ink: '#8087a6', paper: '#565e7e' },
+  { key: 'rose',       name: 'Rose (Databases)',          ink: '#b57a86', paper: '#8f5560' },
 ];
 
 /* THE ICOR FOR LIFE SCAFFOLD, as the theme styles it. Listed so a member can
@@ -106,6 +107,7 @@ const SCAFFOLD = [
   { room: '04', kind: 'room', hue: 'success',    icon: 'sprout',         label: 'Inner World' },
   { room: '05', kind: 'room', hue: 'burgundy',   icon: 'package',        label: 'Assets' },
   { room: '06', kind: 'room', hue: 'indigo',     icon: 'bot',            label: 'AI Team' },
+  { room: '07', kind: 'room', hue: 'rose',       icon: 'database',       label: 'Databases' },
   { room: '01', sub: 'Outer World',       kind: 'family', hue: 'terracotta', icon: 'globe' },
   { room: '01', sub: 'Scanner Inbox',     kind: 'family', hue: 'terracotta', icon: 'scan-line' },
   { room: '04', sub: 'Contacts',          kind: 'family', hue: 'cyan',       icon: 'users' },

@@ -245,7 +245,7 @@ test('unload releases every row it claimed', async () => {
 /* ------------------------------------------------------------- scaffold -- */
 
 test('the scaffold list resolves rooms by prefix, so a renamed room is still listed', async () => {
-  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Scratchpad', '04 Somewhere Else', '04 Somewhere Else/Journal', '06 AI Team', 'Notes'] });
+  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Scratchpad', '04 Somewhere Else', '04 Somewhere Else/Journal', '06 AI Team', '07 Data', 'Notes'] });
   await plugin.onload(); ready();
   const rows = plugin.constructor.resolveScaffold(plugin.app);
   const paths = rows.map((r) => r.path);
@@ -257,6 +257,15 @@ test('the scaffold list resolves rooms by prefix, so a renamed room is still lis
   assert.equal(inner.defaults.color, '#7d9a7f', 'Inner World does not show the theme\'s own green');
   assert.equal(inner.defaults.icon, 'sprout');
   assert.equal(inner.defaults.label, 'Inner World');
+  /* Room 07 keys on its prefix too: "07 Data" (the private-vault name) still
+   * resolves to the Databases room with the theme's own rose. */
+  const databases = rows.find((r) => r.path === '07 Data');
+  assert.ok(databases, `the 07 room is not listed: ${paths}`);
+  assert.equal(databases.defaults.kind, 'room');
+  assert.equal(databases.defaults.color, '#b57a86', 'room 07 does not show the theme\'s own rose ink');
+  assert.equal(databases.defaults.colorPaper, '#8f5560', 'room 07 does not show the theme\'s own rose paper');
+  assert.equal(databases.defaults.icon, 'database');
+  assert.equal(databases.defaults.label, 'Databases');
 });
 
 test('editing a scaffold folder stores an override starting from the theme\'s values', async () => {
