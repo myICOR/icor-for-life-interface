@@ -465,23 +465,8 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       this.renderSwitch(containerEl, SWITCHES.find((s) => s.key === 'roomsOff'));
     }
 
-    /* --- the scaffold, as the theme draws it, editable --- */
+    /* --- the user's own additions, first: the thing you came here to do --- */
     const scaffold = resolveScaffold(this.app);
-    if (scaffold.length) {
-      new Setting(containerEl).setName('ICOR for Life - Scaffold').setHeading();
-      new Setting(containerEl)
-        .setDesc('The folders the INKLINE theme styles on its own, with the colour and icon it gives each. Change any of them here; the change is stored, the theme keeps drawing the rest. Reset returns a folder to the theme.');
-      for (const { path, defaults } of scaffold) {
-        const override = this.plugin.folderConfig(path);
-        this.renderRow(containerEl, override || defaults, {
-          isOverride: !!override,
-          onChange: (patch) => this.plugin.overrideFolder(defaults, patch),
-          onReset: () => this.plugin.resetFolder(path),
-        });
-      }
-    }
-
-    /* --- the user's own additions --- */
     new Setting(containerEl).setName('Your folders').setHeading();
     new Setting(containerEl)
       .setDesc('Give any other folder a colour and an icon.')
@@ -507,6 +492,22 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         },
       });
     }
+
+    /* --- the scaffold, as the theme draws it, editable --- */
+    if (scaffold.length) {
+      new Setting(containerEl).setName('ICOR for Life - Scaffold').setHeading();
+      new Setting(containerEl)
+        .setDesc('The folders the INKLINE theme styles on its own, with the colour and icon it gives each. Change any of them here; the change is stored, the theme keeps drawing the rest. Reset returns a folder to the theme.');
+      for (const { path, defaults } of scaffold) {
+        const override = this.plugin.folderConfig(path);
+        this.renderRow(containerEl, override || defaults, {
+          isOverride: !!override,
+          onChange: (patch) => this.plugin.overrideFolder(defaults, patch),
+          onReset: () => this.plugin.resetFolder(path),
+        });
+      }
+    }
+
   }
 
   /* One row per folder, the same for a scaffold folder and a user's own:
