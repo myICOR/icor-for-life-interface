@@ -1,0 +1,10 @@
+{
+  "id": "icor-for-life-interface",
+  "name": "ICOR for Life - Interface",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "The vault's chrome in one place: hide the ribbon and Obsidian's own controls, and give any folder a colour, an icon and a label. Writes no CSS; the INKLINE theme draws it. Part of the ICOR for Life suite.",
+  "author": "myICOR",
+  "authorUrl": "https://myicor.com",
+  "isDesktopOnly": false
+}

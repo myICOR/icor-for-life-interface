@@ -1,0 +1,33 @@
+/* ICOR for Life - Interface: the settings tab only.
+   Everything this plugin does to the vault is drawn by the INKLINE theme;
+   this file styles the controls that edit it. */
+
+.icor-if-folder {
+  border-top: 1px solid var(--ink-hairline-subtle, var(--background-modifier-border));
+  margin-top: 12px;
+  padding-top: 4px;
+}
+
+.icor-if-folder .setting-item {
+  border-top: none;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.icor-if-icon-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icor-if-icon-suggestion-glyph {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  color: var(--ink-marker, var(--interactive-accent));
+}
+
+.icor-if-icon-suggestion-glyph svg {
+  width: 18px;
+  height: 18px;
+}
