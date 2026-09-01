@@ -481,7 +481,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
 
     const scaffoldPaths = new Set(scaffold.map((s) => s.path));
     for (const cfg of this.plugin.settings.folders) {
-      if (scaffoldPaths.has(cfg.path)) continue;   /* shown above, in its place */
+      if (scaffoldPaths.has(cfg.path)) continue;   /* a scaffold override; shown in the scaffold list below */
       this.renderRow(containerEl, cfg, {
         isOverride: true,
         editablePath: true,
@@ -507,7 +507,6 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         });
       }
     }
-
   }
 
   /* One row per folder, the same for a scaffold folder and a user's own:
