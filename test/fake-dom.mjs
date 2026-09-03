@@ -41,6 +41,11 @@ class FakeEl {
   get firstChild() { return this.children[0] || null; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
   hasAttribute(k) { return k in this.attrs; }
+  /* nearest ancestor-or-self matching one simple selector */
+  closest(sel) {
+    for (let el = this; el; el = el.parentElement) if (matches(el, sel)) return el;
+    return null;
+  }
   removeAttribute(k) { delete this.attrs[k]; }
   /* inline style, custom properties included - the plugin writes --room-* */
   get style() {

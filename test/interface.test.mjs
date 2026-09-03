@@ -65,11 +65,14 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
       async saveData(d) { savedData.value = JSON.parse(JSON.stringify(d)); }
       addSettingTab() {}
       registerEvent() {}
+      registerMarkdownPostProcessor() {}
+      registerDomEvent() {}
     },
     PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },
     Setting: class { constructor() {} setName() { return this; } setDesc() { return this; } setHeading() { return this; } addToggle() { return this; } addButton() { return this; } addText() { return this; } addDropdown() { return this; } addExtraButton() { return this; } addColorPicker() { return this; } },
     FuzzySuggestModal: class { constructor() {} setPlaceholder() {} },
     AbstractInputSuggest: class { constructor() {} },
+    Modal: class { constructor(app) { this.app = app; } open() {} },
     Notice: class {},
     TFolder,
     setIcon: () => {},

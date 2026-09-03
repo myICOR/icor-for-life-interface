@@ -62,11 +62,14 @@ function loadPlugin({ saved = {}, leaves = [], headings = HEADINGS } = {}) {
       async saveData(d) { saved = JSON.parse(JSON.stringify(d)); }
       addSettingTab() {}
       registerEvent() {}
+      registerMarkdownPostProcessor() {}
+      registerDomEvent() {}
     },
     PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },
     Setting: class { setName() { return this; } setDesc() { return this; } setHeading() { return this; } addToggle() { return this; } addButton() { return this; } addText() { return this; } addDropdown() { return this; } addExtraButton() { return this; } addColorPicker() { return this; } },
     FuzzySuggestModal: class { setPlaceholder() {} },
     AbstractInputSuggest: class {},
+    Modal: class { constructor(app) { this.app = app; } open() {} },
     Notice: class {},
     TFolder: class {},
     setIcon: () => {},

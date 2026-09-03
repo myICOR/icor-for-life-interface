@@ -6,8 +6,8 @@ shown, and which folders carry a colour, an icon and a label.
 **It writes no CSS for what the theme owns.** The [ICOR for Life - INKLINE](https://github.com/myICOR/icor-for-life-inkline)
 theme draws the chrome and the folders; this plugin owns the settings the
 theme reads. Install the theme first, or those switches move and change
-nothing. The one thing that carries its own small stylesheet is the table of
-contents, because it has to work on any theme.
+nothing. Two things carry their own small stylesheet, the table of contents
+and the diagram viewer, because both have to work on any theme.
 
 **Beta.** In daily use in a real vault; rough edges likely. Open an issue.
 
@@ -31,6 +31,12 @@ that readable line width leaves free, on every markdown note. It stays in
 view while the note scrolls under it, or, with the sub-option off, sits at
 the top of the note and scrolls away with it. Choose how many heading levels
 to list. It hides on its own when the margin is too narrow to hold it.
+
+**Diagrams.** Every rendered mermaid diagram gets a small fullscreen button
+beside the edit control. Open it edge to edge: wheel or pinch to zoom around
+the cursor, drag to pan, double-click to reset, `+` `-` `0` and arrows on the
+keyboard, Esc to close. This was the separate ICOR for Life - Diagrams plugin
+until September 2026; it lives here now, as one switch.
 
 **Folders.** Give any folder a colour, an icon and, for rooms, a label. Pick
 one of INKLINE's seven hues or set your own ink and paper colours; pick any of

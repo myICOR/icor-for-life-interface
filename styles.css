@@ -109,3 +109,151 @@
   border-left-color: var(--ink-marker, var(--interactive-accent));
   background: var(--ink-hover-wash, var(--background-modifier-hover));
 }
+
+/* --------------------------------------------------------------- diagrams --
+   Was ICOR for Life - Diagrams' styles.css, verbatim. Same class names, so a
+   vault mid-transition renders one button either way. Every token falls
+   back for vanilla themes. */
+
+/* ------------------------------------------------------------ button */
+
+/* The host needs to anchor the absolutely-positioned button. */
+.icor-diag-host {
+  position: relative;
+}
+
+/* button.-prefixed + host scope: outweigh theme element-level button
+ * styling (e.g. .theme-dark button { border/background }) so the control
+ * reads like Obsidian's own unboxed edit-block affordance. */
+.icor-diag-host button.icor-diag-btn {
+  position: absolute;
+  top: var(--size-2-2, 4px);
+  inset-inline-end: var(--size-2-2, 4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--size-2-2, 4px) var(--size-2-3, 6px);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: var(--radius-s, 4px);
+  color: var(--text-muted);
+  cursor: var(--cursor, pointer);
+  z-index: 1;
+}
+.icor-diag-btn svg { width: var(--icon-size, 18px); height: var(--icon-size, 18px); }
+
+.icor-diag-host button.icor-diag-btn:hover {
+  color: var(--ink-marker, #ff5a2d);
+  background-color: var(--background-modifier-hover);
+}
+
+/* Live preview: sit LEFT of Obsidian's native </> edit affordance, which
+ * lives at inset-inline-end: var(--size-2-2) with the same padding box. */
+.icor-diag-host button.icor-diag-btn.icor-diag-btn-lp {
+  inset-inline-end: calc(
+    var(--size-2-2, 4px) * 2
+    + var(--size-2-3, 6px) * 2
+    + var(--icon-size, 18px)
+  );
+}
+
+/* Mirror the native edit button's reveal: hidden until the block is
+ * hovered (hover-capable devices only; touch keeps it always visible). */
+@media (hover: hover) {
+  .icor-diag-btn { opacity: 0; }
+  .cm-embed-block:hover .icor-diag-btn,
+  .icor-diag-host:hover .icor-diag-btn,
+  .icor-diag-btn:focus-visible { opacity: 1; }
+}
+
+/* ------------------------------------------------------------ modal */
+
+.icor-diag-container { padding: 0; }
+
+.modal.icor-diag-modal {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--ink-well, var(--background-primary));
+}
+.theme-light .modal.icor-diag-modal { background: var(--background-primary); }
+
+.icor-diag-modal .modal-content {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.icor-diag-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.icor-diag-stage.is-panning { cursor: grabbing; }
+
+/* The holder carries class "mermaid" so the app's dark-mode invert filter
+ * applies; undo the app's own overflow-x scroll on that class here. */
+.icor-diag-holder.mermaid {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  overflow: visible;
+  will-change: transform;
+}
+
+.icor-diag-kicker {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  /* clear of the macOS traffic lights on the frameless window */
+  left: 92px;
+  pointer-events: none;
+  font-family: var(--ink-font-mono, ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--ink-marker, #ff5a2d);
+}
+
+.icor-diag-controls {
+  position: absolute;
+  z-index: 2;
+  right: 16px;
+  bottom: 14px;
+  display: flex;
+  gap: 6px;
+}
+
+.icor-diag-ctl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--ink-overlay, var(--background-primary));
+  border: 1px solid var(--ink-hairline-emphasis, var(--background-modifier-border));
+  border-radius: var(--ink-radius-control, 8px);
+  box-shadow: none;
+  color: var(--ink-paper-dim, var(--text-muted));
+  cursor: var(--cursor, pointer);
+}
+.theme-light .icor-diag-ctl {
+  background: var(--background-primary);
+  color: var(--text-muted);
+}
+.icor-diag-ctl:hover {
+  color: var(--ink-marker, #ff5a2d);
+  border-color: var(--ink-marker, #ff5a2d);
+}
+.icor-diag-ctl svg { width: 16px; height: 16px; }
