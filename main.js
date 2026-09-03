@@ -737,10 +737,10 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Outline').setHeading();
     new Setting(containerEl)
       .setName('Heading depth')
-      .setDesc("How deep the core Outline pane lists. Obsidian nests each heading under the one above it, so this counts levels of nesting, not H-numbers: a note that goes H1, H3 has two levels. Obsidian's own Outline switch is under Core plugins.")
+      .setDesc("How deep the core Outline pane lists. Obsidian nests each heading under the one above it, so a note that skips a level (H1 straight to H3) counts the H3 as the second level. Obsidian's own Outline switch is under Core plugins.")
       .addDropdown((d) => {
         d.addOption('0', 'All levels');
-        for (let i = 1; i <= 6; i++) d.addOption(String(i), `${i} level${i > 1 ? 's' : ''}`);
+        for (let i = 1; i <= 6; i++) d.addOption(String(i), i === 1 ? 'H1 only' : `H1 to H${i}`);
         d.setValue(String(this.plugin.settings.outlineDepth || 0))
           .onChange(async (v) => {
             this.plugin.settings.outlineDepth = Number(v);
