@@ -101,7 +101,8 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
   const layoutReady = [];
   const app = {
     vault: { getRoot: () => root },
-    workspace: { onLayoutReady: (fn) => layoutReady.push(fn), on: () => ({}) },
+    workspace: { onLayoutReady: (fn) => layoutReady.push(fn), on: () => ({}), getLeavesOfType: () => [] },
+    metadataCache: { on: () => ({}), getFileCache: () => null },
     plugins: { enabledPlugins: new Set(styleSettings ? ['obsidian-style-settings'] : []) },
   };
   const PluginClass = sandbox.module.exports;

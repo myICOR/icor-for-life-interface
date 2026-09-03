@@ -19,3 +19,93 @@
   width: 18px;
   height: 18px;
 }
+
+/* ------------------------------------------------------ table of contents --
+   The one thing in this plugin that carries its own stylesheet: a contents
+   panel has to work on any theme. It reads INKLINE's tokens where they exist
+   and falls back to Obsidian's own everywhere else.
+
+   Geometry: the panel is absolutely positioned in the LEFT GUTTER - the space
+   readable line width leaves beside the text. --icor-toc-gutter is measured
+   by the plugin from the rendered sizer, so the width below is the truth for
+   this pane, this theme, this setting. Under TOC_MIN_GUTTER the plugin adds
+   .is-narrow and the panel hides rather than crowd the text. */
+
+.workspace-leaf-content[data-type="markdown"] .view-content {
+  position: relative;
+}
+.markdown-preview-sizer,
+.cm-sizer {
+  position: relative;
+}
+
+.icor-if-toc {
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  width: calc(var(--icor-toc-gutter, 0px) - 36px);
+  max-width: 260px;
+  max-height: calc(100% - 48px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-paper-dim, var(--text-muted));
+  scrollbar-width: none;
+}
+.icor-if-toc::-webkit-scrollbar { display: none; }
+.icor-if-toc.is-narrow { display: none; }
+
+/* sticky: anchored to the view container, outside the scroller */
+.icor-if-toc.is-sticky {
+  top: 24px;
+  left: 16px;
+}
+
+/* flow: anchored to the sizer, to the LEFT of the text, scrolls with it */
+.icor-if-toc.is-flow {
+  top: 0;
+  right: 100%;
+  margin-right: 24px;
+  max-height: none;
+  overflow: visible;
+}
+
+.icor-if-toc-title {
+  font-family: var(--ink-font-mono, var(--font-monospace));
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-paper-faint, var(--text-faint));
+  margin-bottom: 8px;
+}
+
+.icor-if-toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.icor-if-toc-item {
+  margin: 0;
+  padding: 0 0 0 calc(var(--icor-toc-indent, 0) * 10px);
+}
+.icor-if-toc-link {
+  display: block;
+  padding: 2px 6px;
+  border-left: 1px solid var(--ink-hairline-subtle, var(--background-modifier-border));
+  border-radius: 0 3px 3px 0;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.icor-if-toc-item[data-level="1"] .icor-if-toc-link {
+  color: var(--ink-paper, var(--text-normal));
+  font-weight: 500;
+}
+.icor-if-toc-link:hover {
+  color: var(--ink-marker, var(--interactive-accent));
+  border-left-color: var(--ink-marker, var(--interactive-accent));
+  background: var(--ink-hover-wash, var(--background-modifier-hover));
+}

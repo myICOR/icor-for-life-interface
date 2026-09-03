@@ -3,9 +3,11 @@
 The vault's chrome in one place. Which parts of Obsidian's own interface are
 shown, and which folders carry a colour, an icon and a label.
 
-**It writes no CSS.** The [ICOR for Life - INKLINE](https://github.com/myICOR/icor-for-life-inkline)
-theme owns every rule; this plugin owns the settings the theme reads. Install
-the theme first, or the switches here move and change nothing.
+**It writes no CSS for what the theme owns.** The [ICOR for Life - INKLINE](https://github.com/myICOR/icor-for-life-inkline)
+theme draws the chrome and the folders; this plugin owns the settings the
+theme reads. Install the theme first, or those switches move and change
+nothing. The one thing that carries its own small stylesheet is the table of
+contents, because it has to work on any theme.
 
 **Beta.** In daily use in a real vault; rough edges likely. Open an issue.
 
@@ -23,6 +25,12 @@ the theme first, or the switches here move and change nothing.
 Each one is a class on `<body>` that INKLINE already guards on. If you have the
 Style Settings plugin installed it owns these same five, and this plugin steps
 aside so the two never disagree.
+
+**Table of contents.** A panel of the note's headings in the left margin
+that readable line width leaves free, on every markdown note. It stays in
+view while the note scrolls under it, or, with the sub-option off, sits at
+the top of the note and scrolls away with it. Choose how many heading levels
+to list. It hides on its own when the margin is too narrow to hold it.
 
 **Folders.** Give any folder a colour, an icon and, for rooms, a label. Pick
 one of INKLINE's seven hues or set your own ink and paper colours; pick any of
