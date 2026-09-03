@@ -1,6 +1,8 @@
-/* ICOR for Life - Interface: the settings tab only.
-   Everything this plugin does to the vault is drawn by the INKLINE theme;
-   this file styles the controls that edit it. */
+/* ICOR for Life - Interface.
+   The chrome switches and the folder rows are drawn by the INKLINE theme and
+   have no CSS here. This file carries the two things that must work on any
+   theme: the Outline depth rules and the diagram viewer, plus the settings
+   tab's own controls. */
 
 .icor-if-icon-suggestion {
   display: flex;
@@ -20,94 +22,30 @@
   height: 18px;
 }
 
-/* ------------------------------------------------------ table of contents --
-   The one thing in this plugin that carries its own stylesheet: a contents
-   panel has to work on any theme. It reads INKLINE's tokens where they exist
-   and falls back to Obsidian's own everywhere else.
+/* ---------------------------------------------------------------- outline --
+   The core Outline pane is a tree of nested .tree-item elements. The plugin
+   puts ONE class on body, icor-outline-depth-N, and the rule for N hides
+   every .tree-item-children nested N deep. No API, no DOM rewriting, and the
+   pane keeps working exactly as Obsidian built it; it just stops listing
+   past the chosen level. Collapse arrows on the last visible level would
+   point at nothing, so they go too. */
 
-   Geometry: the panel is absolutely positioned in the LEFT GUTTER - the space
-   readable line width leaves beside the text. --icor-toc-gutter is measured
-   by the plugin from the rendered sizer, so the width below is the truth for
-   this pane, this theme, this setting. Under TOC_MIN_GUTTER the plugin adds
-   .is-narrow and the panel hides rather than crowd the text. */
-
-.workspace-leaf-content[data-type="markdown"] .view-content {
-  position: relative;
-}
-.markdown-preview-sizer,
-.cm-sizer {
-  position: relative;
+.icor-outline-depth-1 .outline .tree-item-children,
+.icor-outline-depth-2 .outline .tree-item-children .tree-item-children,
+.icor-outline-depth-3 .outline .tree-item-children .tree-item-children .tree-item-children,
+.icor-outline-depth-4 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children,
+.icor-outline-depth-5 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children,
+.icor-outline-depth-6 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children {
+  display: none;
 }
 
-.icor-if-toc {
-  position: absolute;
-  z-index: 5;
-  box-sizing: border-box;
-  width: calc(var(--icor-toc-gutter, 0px) - 36px);
-  max-width: 260px;
-  max-height: calc(100% - 48px);
-  overflow-y: auto;
-  padding: 10px 12px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--ink-paper-dim, var(--text-muted));
-  scrollbar-width: none;
-}
-.icor-if-toc::-webkit-scrollbar { display: none; }
-.icor-if-toc.is-narrow { display: none; }
-
-/* sticky: anchored to the view container, outside the scroller */
-.icor-if-toc.is-sticky {
-  top: 24px;
-  left: 16px;
-}
-
-/* flow: anchored to the sizer, to the LEFT of the text, scrolls with it */
-.icor-if-toc.is-flow {
-  top: 0;
-  right: 100%;
-  margin-right: 24px;
-  max-height: none;
-  overflow: visible;
-}
-
-.icor-if-toc-title {
-  font-family: var(--ink-font-mono, var(--font-monospace));
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--ink-paper-faint, var(--text-faint));
-  margin-bottom: 8px;
-}
-
-.icor-if-toc-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.icor-if-toc-item {
-  margin: 0;
-  padding: 0 0 0 calc(var(--icor-toc-indent, 0) * 10px);
-}
-.icor-if-toc-link {
-  display: block;
-  padding: 2px 6px;
-  border-left: 1px solid var(--ink-hairline-subtle, var(--background-modifier-border));
-  border-radius: 0 3px 3px 0;
-  color: inherit;
-  text-decoration: none;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.icor-if-toc-item[data-level="1"] .icor-if-toc-link {
-  color: var(--ink-paper, var(--text-normal));
-  font-weight: 500;
-}
-.icor-if-toc-link:hover {
-  color: var(--ink-marker, var(--interactive-accent));
-  border-left-color: var(--ink-marker, var(--interactive-accent));
-  background: var(--ink-hover-wash, var(--background-modifier-hover));
+.icor-outline-depth-1 .outline > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-2 .outline .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-3 .outline .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-4 .outline .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-5 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-6 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon {
+  visibility: hidden;
 }
 
 /* --------------------------------------------------------------- diagrams --

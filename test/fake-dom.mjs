@@ -36,6 +36,10 @@ class FakeEl {
         return on;
       },
       contains: (c) => s.has(c),
+      /* a real DOMTokenList is iterable; the plugin spreads body.classList */
+      [Symbol.iterator]: () => s[Symbol.iterator](),
+      forEach: (fn) => { for (const x of [...s]) fn(x); },
+      get length() { return s.size; },
     };
   }
   get firstChild() { return this.children[0] || null; }

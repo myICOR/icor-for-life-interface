@@ -1,9 +1,9 @@
 {
   "id": "icor-for-life-interface",
   "name": "ICOR for Life - Interface",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "minAppVersion": "1.5.0",
-  "description": "The vault's chrome in one place: hide the ribbon and the app's own controls, a table of contents beside every note, a fullscreen viewer for mermaid diagrams, and any folder's colour, icon and label. The INKLINE theme draws the chrome. Part of the ICOR for Life suite.",
+  "description": "The vault's chrome in one place: the ribbon and the app's own controls as switches, Outline depth, a fullscreen viewer for mermaid diagrams, and any folder's colour, icon and label. The INKLINE theme draws the chrome. Part of the ICOR for Life suite.",
   "author": "myICOR",
   "authorUrl": "https://myicor.com",
   "isDesktopOnly": false

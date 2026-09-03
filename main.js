@@ -45,32 +45,46 @@ const {
  * present, so a switch whose class is a negation ("hide", "off", "no") reads
  * correctly in the settings tab without the user parsing double negatives. */
 const SWITCHES = [
+  /* Every switch reads as "is this on". The theme's classes do not all point
+     the same way - some are present-means-hidden, some present-means-off - so
+     `on` says which class state the switch's ON position maps to. The user
+     never sees a negative; the class does the negating. */
   {
-    key: 'hideRibbon', cls: 'icor-hide-ribbon',
-    name: 'Hide the left ribbon',
-    desc: 'The thin column of icons on the far left. ICOR for Life routes every action it carried to the file-tree toolbar, the top row or the command palette.',
+    key: 'showRibbon', cls: 'icor-hide-ribbon', on: 'absent',
+    name: 'Left ribbon',
+    desc: 'The thin column of icons on the far left. ICOR for Life routes every action it carried to the file-tree toolbar, the top row or the command palette, so the scaffold ships this off.',
   },
   {
-    key: 'reduceChrome', cls: 'icor-scaffold-chrome',
-    name: "Reduce Obsidian's own controls",
-    desc: 'Hides the vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order from the file-tree toolbar.',
+    key: 'showControls', cls: 'icor-scaffold-chrome', on: 'absent',
+    name: "Obsidian's own file controls",
+    desc: 'The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order on the file-tree toolbar. The scaffold reroutes all four and ships this off.',
   },
   {
-    key: 'hideBanner', cls: 'icor-hide-banner',
-    name: 'Hide the ICOR for Life banner',
+    key: 'showBanner', cls: 'icor-hide-banner', on: 'absent',
+    name: 'ICOR for Life banner',
     desc: 'The banner above the folder tree.',
   },
   {
-    key: 'roomsOff', cls: 'icor-rooms-off',
-    name: 'Turn off room icons and colours',
-    desc: "Every folder goes back to Obsidian's default look, including any you configured below.",
+    key: 'roomIcons', cls: 'icor-rooms-off', on: 'absent',
+    name: 'Room icons and colours',
+    desc: "Folders carry an icon and a colour. Off, every folder has Obsidian's default look, including any you configured below.",
   },
   {
-    key: 'noHand', cls: 'inkline-no-hand',
-    name: 'Turn off the handwritten layer',
-    desc: 'Blockquotes, note/tip/quote callouts and %%comments%% render in the body face instead of handwriting.',
+    key: 'handwriting', cls: 'inkline-no-hand', on: 'absent',
+    name: 'Handwritten layer',
+    desc: 'Blockquotes, note/tip/quote callouts and %%comments%% render in handwriting. Off, they use the body face.',
   },
 ];
+
+/* Settings written by 0.5.x and earlier used the theme's negative names.
+   Each maps to its positive successor by inversion, once, on load. */
+const LEGACY_KEYS = {
+  hideRibbon: 'showRibbon',
+  reduceChrome: 'showControls',
+  hideBanner: 'showBanner',
+  roomsOff: 'roomIcons',
+  noHand: 'handwriting',
+};
 
 /* INKLINE's eight room hues, ink and paper. Offered as a palette so a folder
  * can join the family in one pick; the colour picker beside it takes anything
@@ -141,25 +155,20 @@ const KINDS = [
 ];
 
 const DEFAULT_SETTINGS = {
-  hideRibbon: false,
-  reduceChrome: false,
-  hideBanner: false,
-  roomsOff: false,
-  noHand: false,
+  showRibbon: true,
+  showControls: true,
+  showBanner: true,
+  roomIcons: true,
+  handwriting: true,
   /* [{ path, kind, color, colorPaper, icon, label }] */
   folders: [],
-  /* the table of contents beside every markdown note */
-  tocEnabled: false,
-  tocSticky: true,
-  tocDepth: 3,
+  /* the core Outline: 0 lists every level, 1-6 stop at that nesting depth */
+  outlineDepth: 0,
   /* the fullscreen button on rendered mermaid diagrams */
   diagramsEnabled: true,
 };
 
-const TOC_CLASS = 'icor-if-toc';
-/* Below this many pixels of gutter the panel would overlap the text, so it
-   hides rather than crowds. */
-const TOC_MIN_GUTTER = 180;
+const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
 
 /* The two folders that make a vault an ICOR for Life vault. Present together
  * at the root, and this plugin has never saved anything, the scaffold's own
@@ -190,7 +199,7 @@ function iconUrl(iconId) {
 class IcorInterfacePlugin extends Plugin {
   async onload() {
     const saved = await this.loadData();
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved || {});
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, this.migrate(saved || {}));
     this.settings.folders = Array.isArray(this.settings.folders) ? this.settings.folders : [];
     if (saved === null || saved === undefined) this.applyFirstRunDefaults();
 
@@ -200,19 +209,12 @@ class IcorInterfacePlugin extends Plugin {
       this.applyChrome();
       this.applyFolders();
       this.observeExplorer();
-      this.refreshTocs();
     });
     this.registerEvent(this.app.workspace.on('layout-change', () => {
       this.applyChrome();
       this.applyFolders();
       this.observeExplorer();
-      this.refreshTocs();
     }));
-    /* The contents panel follows the note: a new file in a leaf, a heading
-       edited, a switch between reading and editing (which is a layout
-       change). Each is a rebuild of that one leaf's panel. */
-    this.registerEvent(this.app.workspace.on('file-open', () => this.refreshTocs()));
-    this.registerEvent(this.app.metadataCache.on('changed', (file) => this.refreshTocs(file)));
 
     /* Diagrams. Registered once; the switch is checked at wire time, because
        a post processor cannot be unregistered. Reading view: Obsidian's own
@@ -240,8 +242,8 @@ class IcorInterfacePlugin extends Plugin {
        classes, and every row it claimed. Left behind, the theme would keep
        rendering a configuration nobody can edit any more. */
     for (const s of SWITCHES) document.body.classList.remove(s.cls);
+    this.applyOutline(0);
     for (const row of document.querySelectorAll(`[${MANAGED}]`)) this.releaseRow(row);
-    this.removeTocs();
     this.removeDiagramButtons();
   }
 
@@ -249,8 +251,21 @@ class IcorInterfacePlugin extends Plugin {
     await this.saveData(this.settings);
     this.applyChrome();
     this.applyFolders();
-    this.refreshTocs();
     if (!this.settings.diagramsEnabled) this.removeDiagramButtons();
+  }
+
+  /* Old negative keys become their positive successors by inversion. The
+     old key is dropped so the file never carries both answers. */
+  migrate(saved) {
+    const out = Object.assign({}, saved);
+    for (const [oldKey, newKey] of Object.entries(LEGACY_KEYS)) {
+      if (oldKey in out) {
+        if (!(newKey in out)) out[newKey] = !out[oldKey];
+        delete out[oldKey];
+      }
+    }
+    for (const k of ['tocEnabled', 'tocSticky', 'tocDepth']) delete out[k];
+    return out;
   }
 
   /* ---------------------------------------------------------- first run -- */
@@ -264,8 +279,8 @@ class IcorInterfacePlugin extends Plugin {
 
   applyFirstRunDefaults() {
     if (!this.isIcorVault()) return;
-    this.settings.hideRibbon = true;
-    this.settings.reduceChrome = true;
+    this.settings.showRibbon = false;
+    this.settings.showControls = false;
     this.firstRunApplied = true;
   }
 
@@ -281,8 +296,24 @@ class IcorInterfacePlugin extends Plugin {
      watches and cannot referee, so this plugin steps aside entirely and the
      settings tab says so. */
   applyChrome() {
+    this.applyOutline(this.settings.outlineDepth);
     if (this.styleSettingsActive()) return;
-    for (const s of SWITCHES) document.body.classList.toggle(s.cls, !!this.settings[s.key]);
+    for (const s of SWITCHES) {
+      const on = !!this.settings[s.key];
+      document.body.classList.toggle(s.cls, s.on === 'present' ? on : !on);
+    }
+  }
+
+  /* The core Outline has no API, but it is a tree of nested .tree-item
+     elements, and a body class plus one CSS rule per depth is enough to stop
+     it at a nesting level. 0 means every level. Only ever one depth class on
+     body at a time. */
+  applyOutline(depth) {
+    const d = Math.max(0, Math.min(6, Number(depth) || 0));
+    for (const cls of [...document.body.classList]) {
+      if (cls.startsWith(OUTLINE_DEPTH_PREFIX)) document.body.classList.remove(cls);
+    }
+    if (d > 0) document.body.classList.add(OUTLINE_DEPTH_PREFIX + d);
   }
 
   /* ------------------------------------------------------------ folders -- */
@@ -597,138 +628,6 @@ IcorInterfacePlugin.prototype.removeDiagramButtons = function () {
   for (const h of document.querySelectorAll('.icor-diag-host')) h.classList.remove('icor-diag-host');
 };
 
-/* ------------------------------------------------------ table of contents --
- * One panel per markdown leaf, built from the metadata cache's headings and
- * placed in the left gutter beside the note - the space readable line width
- * leaves empty. Two placements:
- *
- *   sticky   the panel is a child of the view container, outside the
- *            scroller, so it stays put while the note scrolls under it.
- *   flow     the panel sits inside the scroller's sizer, to the left of the
- *            text, and scrolls away with the top of the note.
- *
- * Both are absolutely positioned off the same anchor geometry, so the panel
- * lands in the same place; only whether it moves differs. The gutter is
- * MEASURED, not assumed: readable line width can be off, the pane can be
- * narrow, and a panel over the text is worse than no panel. Under
- * TOC_MIN_GUTTER it hides.
- *
- * This is the one thing in the plugin that carries its own stylesheet. The
- * chrome switches and the folder rows are the theme's territory and it draws
- * them; a contents panel has to work on any theme, so its CSS ships here and
- * reads INKLINE's tokens with fallbacks. */
-
-function markdownLeaves(app) {
-  return (app.workspace.getLeavesOfType ? app.workspace.getLeavesOfType('markdown') : []) || [];
-}
-
-IcorInterfacePlugin.prototype.refreshTocs = function (changedFile) {
-  if (!this.settings.tocEnabled) { this.removeTocs(); return; }
-  for (const leaf of markdownLeaves(this.app)) {
-    const view = leaf.view;
-    if (!view || !view.file) continue;
-    if (changedFile && view.file.path !== changedFile.path) continue;
-    this.renderToc(view);
-  }
-};
-
-IcorInterfacePlugin.prototype.removeTocs = function () {
-  for (const el of document.querySelectorAll('.' + TOC_CLASS)) el.remove();
-  for (const ro of this.tocObservers || []) ro.disconnect();
-  this.tocObservers = [];
-};
-
-/* Where the panel lives for this view and this stickiness. */
-IcorInterfacePlugin.prototype.tocHost = function (view) {
-  const content = view.contentEl;
-  if (!content) return null;
-  if (this.settings.tocSticky) return content;
-  const mode = typeof view.getMode === 'function' ? view.getMode() : 'preview';
-  const sizer = mode === 'preview'
-    ? content.querySelector('.markdown-preview-sizer')
-    : content.querySelector('.cm-sizer');
-  /* No sizer yet (view still mounting): fall back to the container rather
-     than draw nothing, and the next layout-change re-places it. */
-  return sizer || content;
-};
-
-IcorInterfacePlugin.prototype.renderToc = function (view) {
-  const file = view.file;
-  const content = view.contentEl;
-  if (!content || !file || file.extension !== 'md') return;
-
-  const old = content.querySelector('.' + TOC_CLASS);
-  if (old) old.remove();
-
-  const cache = this.app.metadataCache.getFileCache(file);
-  const depth = Math.max(1, Math.min(6, Number(this.settings.tocDepth) || 3));
-  const headings = ((cache && cache.headings) || []).filter((h) => h.level <= depth);
-  if (headings.length === 0) return;
-
-  const host = this.tocHost(view);
-  if (!host) return;
-
-  const nav = host.createEl('nav', { cls: TOC_CLASS + (this.settings.tocSticky ? ' is-sticky' : ' is-flow') });
-  host.prepend(nav);
-  nav.setAttribute('aria-label', 'Table of contents');
-  nav.createDiv({ cls: TOC_CLASS + '-title', text: 'Contents' });
-  const list = nav.createEl('ul', { cls: TOC_CLASS + '-list' });
-  const top = headings[0].level;
-  for (const h of headings) {
-    const item = list.createEl('li', { cls: TOC_CLASS + '-item' });
-    item.setAttribute('data-level', String(h.level));
-    item.style.setProperty('--icor-toc-indent', String(Math.max(0, h.level - top)));
-    const link = item.createEl('a', { cls: TOC_CLASS + '-link', text: h.heading });
-    link.setAttribute('href', '#');
-    link.addEventListener('click', (evt) => {
-      evt.preventDefault();
-      this.scrollToHeading(view, h);
-    });
-  }
-
-  this.measureGutter(view, nav);
-};
-
-/* Jump within the leaf the panel belongs to, in whichever mode it is in.
-   Reading mode scrolls by source line; editing mode moves the cursor there
-   and scrolls it into view. Neither opens a link, so the panel never sends a
-   click to another leaf. */
-IcorInterfacePlugin.prototype.scrollToHeading = function (view, heading) {
-  const line = heading.position.start.line;
-  const mode = typeof view.getMode === 'function' ? view.getMode() : 'preview';
-  if (mode === 'preview' && view.previewMode && typeof view.previewMode.applyScroll === 'function') {
-    view.previewMode.applyScroll(line);
-    return;
-  }
-  if (view.editor) {
-    view.editor.setCursor({ line, ch: 0 });
-    if (typeof view.editor.scrollIntoView === 'function') {
-      view.editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, true);
-    }
-  }
-};
-
-/* The gutter is the space between the pane's left edge and the text. It is
-   read from the rendered sizer, because that is the truth after readable
-   line width, pane width and every theme have had their say. */
-IcorInterfacePlugin.prototype.measureGutter = function (view, nav) {
-  const content = view.contentEl;
-  const apply = () => {
-    const sizer = content.querySelector('.markdown-preview-sizer') || content.querySelector('.cm-sizer');
-    const paneWidth = content.clientWidth || 0;
-    const textWidth = sizer ? (sizer.clientWidth || 0) : 0;
-    const gutter = paneWidth && textWidth ? Math.max(0, (paneWidth - textWidth) / 2) : 0;
-    nav.style.setProperty('--icor-toc-gutter', gutter + 'px');
-    nav.classList.toggle('is-narrow', gutter < TOC_MIN_GUTTER);
-  };
-  apply();
-  if (typeof ResizeObserver !== 'undefined') {
-    const ro = new ResizeObserver(apply);
-    ro.observe(content);
-    (this.tocObservers || (this.tocObservers = [])).push(ro);
-  }
-};
-
 /* ----------------------------------------------------- the scaffold list -- */
 
 /* Resolve every SCAFFOLD entry against the live vault: the room is the root
@@ -829,9 +728,25 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     this.renderChrome(containerEl);
-    this.renderToc(containerEl);
+    this.renderOutline(containerEl);
     this.renderDiagrams(containerEl);
     this.renderFolders(containerEl);
+  }
+
+  renderOutline(containerEl) {
+    new Setting(containerEl).setName('Outline').setHeading();
+    new Setting(containerEl)
+      .setName('Heading depth')
+      .setDesc("How deep the core Outline pane lists. Obsidian nests each heading under the one above it, so this counts levels of nesting, not H-numbers: a note that goes H1, H3 has two levels. Obsidian's own Outline switch is under Core plugins.")
+      .addDropdown((d) => {
+        d.addOption('0', 'All levels');
+        for (let i = 1; i <= 6; i++) d.addOption(String(i), `${i} level${i > 1 ? 's' : ''}`);
+        d.setValue(String(this.plugin.settings.outlineDepth || 0))
+          .onChange(async (v) => {
+            this.plugin.settings.outlineDepth = Number(v);
+            await this.plugin.saveSettings();
+          });
+      });
   }
 
   renderDiagrams(containerEl) {
@@ -847,43 +762,6 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         }));
   }
 
-  renderToc(containerEl) {
-    new Setting(containerEl).setName('Table of contents').setHeading();
-    new Setting(containerEl)
-      .setName('Show a table of contents beside every note')
-      .setDesc('Built from the note\'s headings, in the left margin that readable line width leaves free. Hidden on its own when that margin is too narrow to hold it.')
-      .addToggle((t) => t
-        .setValue(!!this.plugin.settings.tocEnabled)
-        .onChange(async (v) => {
-          this.plugin.settings.tocEnabled = v;
-          await this.plugin.saveSettings();
-          this.display();
-        }));
-    if (!this.plugin.settings.tocEnabled) return;
-
-    new Setting(containerEl)
-      .setName('Keep it in view while scrolling')
-      .setDesc('On: the contents stay put and the note scrolls under them. Off: they sit at the top of the note and scroll away with it.')
-      .addToggle((t) => t
-        .setValue(!!this.plugin.settings.tocSticky)
-        .onChange(async (v) => {
-          this.plugin.settings.tocSticky = v;
-          await this.plugin.saveSettings();
-        }));
-
-    new Setting(containerEl)
-      .setName('Heading depth')
-      .setDesc('How many heading levels to list.')
-      .addDropdown((d) => {
-        for (let i = 1; i <= 6; i++) d.addOption(String(i), `H1 to H${i}`);
-        d.setValue(String(this.plugin.settings.tocDepth || 3))
-          .onChange(async (v) => {
-            this.plugin.settings.tocDepth = Number(v);
-            await this.plugin.saveSettings();
-          });
-      });
-  }
-
   renderChrome(containerEl) {
     new Setting(containerEl).setName("Obsidian's interface").setHeading();
 
@@ -894,7 +772,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       return;
     }
     for (const s of SWITCHES) {
-      if (s.key === 'roomsOff') continue;   /* lives with the folders */
+      if (s.key === 'roomIcons') continue;   /* lives with the folders */
       this.renderSwitch(containerEl, s);
     }
   }
@@ -916,7 +794,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
 
     /* The master switch sits with what it switches. */
     if (!this.plugin.styleSettingsActive()) {
-      this.renderSwitch(containerEl, SWITCHES.find((s) => s.key === 'roomsOff'));
+      this.renderSwitch(containerEl, SWITCHES.find((s) => s.key === 'roomIcons'));
     }
 
     /* --- the user's own additions, first: the thing you came here to do --- */

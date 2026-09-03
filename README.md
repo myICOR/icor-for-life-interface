@@ -6,31 +6,32 @@ shown, and which folders carry a colour, an icon and a label.
 **It writes no CSS for what the theme owns.** The [ICOR for Life - INKLINE](https://github.com/myICOR/icor-for-life-inkline)
 theme draws the chrome and the folders; this plugin owns the settings the
 theme reads. Install the theme first, or those switches move and change
-nothing. Two things carry their own small stylesheet, the table of contents
+nothing. Two things carry their own small stylesheet, the Outline depth rules
 and the diagram viewer, because both have to work on any theme.
 
 **Beta.** In daily use in a real vault; rough edges likely. Open an issue.
 
 ## What you get
 
-**Obsidian's interface.** Five switches, in plain words:
+**Obsidian's interface.** Five switches, and every one reads as "is this
+on", so ON always means shown:
 
-- Hide the left ribbon
-- Reduce Obsidian's own controls (the vault switcher, and New note / New
+- Left ribbon
+- Obsidian's own file controls (the vault switcher, and New note / New
   folder / Change sort order on the file-tree toolbar)
-- Hide the ICOR for Life banner
-- Turn off room icons and colours
-- Turn off the handwritten layer
+- ICOR for Life banner
+- Room icons and colours
+- Handwritten layer
 
-Each one is a class on `<body>` that INKLINE already guards on. If you have the
-Style Settings plugin installed it owns these same five, and this plugin steps
-aside so the two never disagree.
+Each one maps to a class on `<body>` that INKLINE already guards on; the
+theme's classes are the negations, and the plugin does the negating so you
+never read a double negative. If you have the Style Settings plugin
+installed it owns those same five classes, and this plugin steps aside so
+the two never disagree.
 
-**Table of contents.** A panel of the note's headings in the left margin
-that readable line width leaves free, on every markdown note. It stays in
-view while the note scrolls under it, or, with the sub-option off, sits at
-the top of the note and scrolls away with it. Choose how many heading levels
-to list. It hides on its own when the margin is too narrow to hold it.
+**Outline.** Obsidian's own Outline pane (a core plugin) lists every heading.
+Set how deep it goes, from all levels down to one. This counts levels of
+nesting, the way the Outline itself nests headings, not H-numbers.
 
 **Diagrams.** Every rendered mermaid diagram gets a small fullscreen button
 beside the edit control. Open it edge to edge: wheel or pinch to zoom around

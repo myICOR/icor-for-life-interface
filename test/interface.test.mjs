@@ -139,21 +139,21 @@ test('a fresh vault that is not ICOR starts with nothing hidden', async () => {
 });
 
 test('saved settings win over the first-run defaults', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { hideRibbon: false, reduceChrome: false, hideBanner: true } });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: true, showControls: true, showBanner: false } });
   await plugin.onload(); ready();
   assert.ok(!body.classSet.has('icor-hide-ribbon'), 'the first-run default overrode a saved choice');
   assert.ok(body.classSet.has('icor-hide-banner'), 'a saved switch was not applied');
 });
 
-test('flipping a switch applies its class, and flipping it back removes it', async () => {
+test('a positive switch maps to the theme\'s negative class, both ways', async () => {
   const { plugin, body, ready } = loadPlugin({ icor: false });
   await plugin.onload(); ready();
-  plugin.settings.noHand = true;
+  plugin.settings.handwriting = false;
   await plugin.saveSettings();
-  assert.ok(body.classSet.has('inkline-no-hand'), 'the class did not follow the switch on');
-  plugin.settings.noHand = false;
+  assert.ok(body.classSet.has('inkline-no-hand'), 'switching handwriting OFF did not add the theme\'s no-hand class');
+  plugin.settings.handwriting = true;
   await plugin.saveSettings();
-  assert.ok(!body.classSet.has('inkline-no-hand'), 'the class did not follow the switch off');
+  assert.ok(!body.classSet.has('inkline-no-hand'), 'switching handwriting back ON did not remove the class');
 });
 
 test('with Style Settings installed the plugin never touches the five classes', async () => {
@@ -167,7 +167,7 @@ test('with Style Settings installed the plugin never touches the five classes', 
 });
 
 test('unload removes every class it set', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { hideRibbon: true, reduceChrome: true, hideBanner: true, roomsOff: true, noHand: true } });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false, showBanner: false, roomIcons: false, handwriting: false } });
   await plugin.onload(); ready();
   assert.equal(SWITCH_CLASSES.filter((c) => body.classSet.has(c)).length, 5, 'not every switch applied');
   plugin.onunload();
@@ -309,4 +309,67 @@ test('only what the user changed is stored: an untouched scaffold list stores no
   plugin.constructor.resolveScaffold(plugin.app);
   assert.ok(!savedData.value || !savedData.value.folders || savedData.value.folders.length === 0,
     'listing the scaffold wrote overrides for it; the theme is the source of truth and the plugin must store only changes');
+});
+
+/* ------------------------------------------------------------ positives -- */
+
+test('every switch reads as ON in a plain vault, and the body carries no theme class', async () => {
+  /* The names say "banner", "handwriting", "room icons": ON means shown.
+     The theme's classes are the negations, so a fresh vault has none. */
+  const { plugin, body, ready } = loadPlugin({ icor: false });
+  await plugin.onload(); ready();
+  for (const k of ['showRibbon', 'showControls', 'showBanner', 'roomIcons', 'handwriting']) {
+    assert.equal(plugin.settings[k], true, `${k} is not ON by default`);
+  }
+  assert.equal(SWITCH_CLASSES.filter((c) => body.classSet.has(c)).length, 0, 'a theme class is on body with every switch ON');
+});
+
+test('settings saved by 0.5.x with the old negative keys migrate by inversion', async () => {
+  const { plugin, body, ready, savedData } = loadPlugin({ saved: { hideRibbon: true, reduceChrome: false, hideBanner: true, roomsOff: false, noHand: true, tocEnabled: true, tocDepth: 2 } });
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.showRibbon, false, 'hideRibbon:true did not become showRibbon:false');
+  assert.equal(plugin.settings.showControls, true, 'reduceChrome:false did not become showControls:true');
+  assert.equal(plugin.settings.showBanner, false);
+  assert.equal(plugin.settings.roomIcons, true);
+  assert.equal(plugin.settings.handwriting, false);
+  for (const k of ['hideRibbon', 'reduceChrome', 'hideBanner', 'roomsOff', 'noHand', 'tocEnabled', 'tocDepth']) {
+    assert.ok(!(k in plugin.settings), `the old key ${k} survived migration; the file would carry both answers`);
+  }
+  assert.ok(body.classSet.has('icor-hide-ribbon'), 'the migrated ribbon choice was not applied');
+  assert.ok(body.classSet.has('inkline-no-hand'), 'the migrated handwriting choice was not applied');
+  assert.ok(!body.classSet.has('icor-scaffold-chrome'));
+});
+
+/* -------------------------------------------------------------- outline -- */
+
+test('outline depth puts exactly one depth class on body, or none for all levels', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: false });
+  await plugin.onload(); ready();
+  const depthClasses = () => [...body.classSet].filter((c) => c.startsWith('icor-outline-depth-'));
+  assert.deepEqual(depthClasses(), [], 'a depth class is on body with depth 0 (all levels)');
+  plugin.settings.outlineDepth = 2;
+  await plugin.saveSettings();
+  assert.deepEqual(depthClasses(), ['icor-outline-depth-2']);
+  plugin.settings.outlineDepth = 4;
+  await plugin.saveSettings();
+  assert.deepEqual(depthClasses(), ['icor-outline-depth-4'], 'the old depth class stayed on body beside the new one');
+  plugin.settings.outlineDepth = 0;
+  await plugin.saveSettings();
+  assert.deepEqual(depthClasses(), [], 'depth 0 left a class behind');
+});
+
+test('outline depth is applied even when Style Settings owns the five switches', async () => {
+  /* Style Settings owns the theme's classes; the outline depth is this
+     plugin's own and must not be silenced with them. */
+  const { plugin, body, ready } = loadPlugin({ icor: false, styleSettings: true, saved: { outlineDepth: 3 } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has('icor-outline-depth-3'), 'outline depth was skipped because Style Settings is installed');
+});
+
+test('unload removes the outline depth class', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: false, saved: { outlineDepth: 3 } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has('icor-outline-depth-3'));
+  plugin.onunload();
+  assert.ok(![...body.classSet].some((c) => c.startsWith('icor-outline-depth-')), 'the depth class outlived the plugin');
 });
