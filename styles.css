@@ -23,28 +23,36 @@
 }
 
 /* ---------------------------------------------------------------- outline --
-   The core Outline pane is a tree of nested .tree-item elements. The plugin
-   puts ONE class on body, icor-outline-depth-N, and the rule for N hides
-   every .tree-item-children nested N deep. No API, no DOM rewriting, and the
-   pane keeps working exactly as Obsidian built it; it just stops listing
-   past the chosen level. Collapse arrows on the last visible level would
-   point at nothing, so they go too. */
+   The core Outline pane, READ FROM THE APP BUNDLE (Obsidian 1.12.7,
+   obsidian.asar): the view renders its tree straight into the leaf's
+   .view-content, with no wrapper class of its own, as
+     .workspace-leaf-content[data-type="outline"] > .view-content
+       > .tree-item > .tree-item-self | .tree-item-children > .tree-item ...
+   The first version of this block anchored on `.outline`, a class that does
+   not exist there, and matched nothing. Measured against a fixture built
+   from that markup in test/outline-render.test.mjs.
 
-.icor-outline-depth-1 .outline .tree-item-children,
-.icor-outline-depth-2 .outline .tree-item-children .tree-item-children,
-.icor-outline-depth-3 .outline .tree-item-children .tree-item-children .tree-item-children,
-.icor-outline-depth-4 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children,
-.icor-outline-depth-5 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children,
-.icor-outline-depth-6 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children {
+   The plugin puts ONE class on body, icor-outline-depth-N, and the rule for
+   N hides every .tree-item-children nested N deep. No API, no DOM rewriting;
+   the pane keeps working exactly as built and stops listing past the chosen
+   level. Collapse arrows on the last visible level would point at nothing,
+   so they go too. */
+
+.icor-outline-depth-1 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children,
+.icor-outline-depth-2 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children,
+.icor-outline-depth-3 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children,
+.icor-outline-depth-4 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children .tree-item-children,
+.icor-outline-depth-5 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children,
+.icor-outline-depth-6 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children {
   display: none;
 }
 
-.icor-outline-depth-1 .outline > .tree-item > .tree-item-self .collapse-icon,
-.icor-outline-depth-2 .outline .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
-.icor-outline-depth-3 .outline .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
-.icor-outline-depth-4 .outline .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
-.icor-outline-depth-5 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
-.icor-outline-depth-6 .outline .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon {
+.icor-outline-depth-1 .workspace-leaf-content[data-type="outline"] .view-content > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-2 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-3 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-4 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-5 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon,
+.icor-outline-depth-6 .workspace-leaf-content[data-type="outline"] .view-content .tree-item-children .tree-item-children .tree-item-children .tree-item-children .tree-item-children > .tree-item > .tree-item-self .collapse-icon {
   visibility: hidden;
 }
 
