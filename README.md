@@ -35,8 +35,11 @@ of the bar, pointing right, folds it away toward the right; a round button
 at the bottom right of the window, pointing left, unfolds it toward the
 left; the command "Toggle status bar" flips it from a hotkey. Folded, the
 round button stays invisible until the pointer comes near the corner, or
-the button has keyboard focus; a setting makes it always visible. The
-fold is remembered across reloads. Collapsed, everything in the bar is out
+the button has keyboard focus; a setting makes it always visible. One
+trade-off while folded: the 64 px corner zone that reveals the button
+also swallows clicks and wheel in that corner; turn off "Show the fold
+button only on hover" to remove it. The fold is remembered across
+reloads. Collapsed, everything in the bar is out
 of sight, plugin indicators included, such as the Git status dot. Main
 window only, since pop-out windows have no status bar. Switch it off and
 Obsidian's bar is left exactly as it is.
