@@ -31,7 +31,7 @@ installed it owns those same five classes, and this plugin steps aside so
 the two never disagree.
 
 **Status bar.** Collapsible, on by default. A small item at the left edge
-of the bar folds it away; a round button at the bottom left of the window
+of the bar folds it away; a round button at the bottom right of the window
 unfolds it; the command "Toggle status bar" flips it from a hotkey. The
 fold is remembered across reloads. Collapsed, everything in the bar is out
 of sight, plugin indicators included, such as the Git status dot. Main

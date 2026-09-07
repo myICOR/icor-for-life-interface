@@ -7,6 +7,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## [0.6.4] - 2026-09-07
+
+### Changed
+- The round button that unfolds the status bar sits at the bottom RIGHT of
+  the window, in the corner the bar itself lives in (right edge on the bar's
+  right padding, bottom on the bar's bottom), so it stands where the bar's
+  last item was. 0.6.3 put it at the bottom left, where it collided with
+  Connect's account footer.
+
 ## [0.6.3] - 2026-09-07
 
 ### Added

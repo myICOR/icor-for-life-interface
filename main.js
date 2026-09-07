@@ -32,7 +32,7 @@
  * Three things carry their own small stylesheet because they must work on
  * any theme: the Outline depth rules, the diagram viewer, and the
  * collapsible status bar (one body class, one item in the bar, one round
- * button at the bottom left of the main window).
+ * button at the bottom right of the main window, where the bar itself lives).
  *
  * Hand-written CommonJS, no build step, like the rest of the suite.
  */
@@ -171,7 +171,7 @@ const DEFAULT_SETTINGS = {
   outlineDepth: 0,
   /* the fullscreen button on rendered mermaid diagrams */
   diagramsEnabled: true,
-  /* the status bar folds away to a round button at the bottom left; off
+  /* the status bar folds away to a round button at the bottom right; off
      leaves Obsidian's bar exactly as it is */
   statusBarCollapsible: true,
   /* the fold itself, remembered across reloads */
@@ -891,7 +891,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
        five above. */
     new Setting(containerEl)
       .setName('Collapsible status bar')
-      .setDesc('The status bar folds away to a small round button at the bottom left. The button, the item at the left edge of the bar and the command "Toggle status bar" all flip it, and the fold is remembered. Collapsed, everything in the bar is out of sight, plugin indicators included, such as the Git status dot. Off, Obsidian\'s status bar is left exactly as it is.')
+      .setDesc('The status bar folds away to a small round button at the bottom right, where the bar itself sits. The button, the item at the left edge of the bar and the command "Toggle status bar" all flip it, and the fold is remembered. Collapsed, everything in the bar is out of sight, plugin indicators included, such as the Git status dot. Off, Obsidian\'s status bar is left exactly as it is.')
       .addToggle((t) => t
         .setValue(!!this.plugin.settings.statusBarCollapsible)
         .onChange(async (v) => {

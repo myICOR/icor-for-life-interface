@@ -232,15 +232,17 @@ body.icor-status-bar-collapsed .status-bar {
 }
 
 /* The round button: hidden until the bar is folded, then fixed at the bottom
-   left, to the RIGHT of the ribbon column so the ribbon's last icon is never
-   covered, and flush left when the ribbon is hidden (by Obsidian's own
-   setting, or by this plugin's switch through the theme). */
+   RIGHT, in the corner the bar itself lives in: its right edge on the bar's
+   right padding and its bottom on the bar's bottom, so it stands exactly
+   where the bar's last item was. The bottom left is taken (the ribbon's
+   last icon, and Connect's account footer); measured against both on
+   0.6.3. */
 body .icor-status-bar-expand {
   display: none;
 }
 body.icor-status-bar-collapsed .icor-status-bar-expand {
   position: fixed;
-  left: calc(var(--ribbon-width, 44px) + var(--size-4-1, 4px));
+  right: var(--size-4-1, 4px);
   bottom: var(--size-4-1, 4px);
   z-index: var(--layer-status-bar, 15);
   display: flex;
@@ -255,10 +257,6 @@ body.icor-status-bar-collapsed .icor-status-bar-expand {
   box-shadow: none;
   color: var(--status-bar-text-color, var(--text-muted));
   cursor: var(--cursor, pointer);
-}
-body.icor-status-bar-collapsed:not(.show-ribbon) .icor-status-bar-expand,
-body.icor-status-bar-collapsed.icor-hide-ribbon .icor-status-bar-expand {
-  left: var(--size-4-1, 4px);
 }
 .icor-status-bar-expand svg {
   width: var(--icon-xs, 14px);

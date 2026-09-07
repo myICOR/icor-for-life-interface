@@ -1,6 +1,6 @@
 {
   "name": "icor-for-life-interface",
-  "version": "0.6.3",
+  "version": "0.6.4",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.mjs"
