@@ -84,7 +84,7 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
     Notice: class {},
     Platform: { isMobile: false, isDesktop: true },
     TFolder,
-    setIcon: () => {},
+    setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
     getIconIds: () => ['lucide-folder', 'lucide-sprout', 'lucide-bot'],
     getIcon: (id) => ({
       cloneNode: () => ({
@@ -386,9 +386,32 @@ test('unload removes the outline depth class', async () => {
 /* ----------------------------------------------------------- status bar -- */
 
 const COLLAPSED = 'icor-status-bar-collapsed';
-const fabOf = (body) => body.children.find((c) => c.classSet.has('icor-status-bar-expand')) || null;
+const HOVER_REVEAL = 'icor-status-bar-hover-reveal';
+const zoneOf = (body) => body.children.find((c) => c.classSet.has('icor-status-bar-zone')) || null;
+const fabOf = (body) => body.querySelector('.icor-status-bar-zone .icor-status-bar-expand');
 const itemOf = (bar) => bar.children.find((c) => c.classSet.has('icor-status-bar-collapse')) || null;
 const toggleCommand = (commands) => commands.find((c) => c.id === 'toggle-status-bar');
+const styles = readFileSync(resolve(repo, 'styles.css'), 'utf8');
+
+/* The declarations of the FIRST rule whose selector list contains `selector`
+   verbatim, as a map. Comments are stripped first so a commented-out rule
+   cannot pass. */
+function declarationsOf(css, selector) {
+  const bare = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let m;
+  while ((m = re.exec(bare))) {
+    const selectors = m[1].split(',').map((x) => x.trim());
+    if (!selectors.includes(selector)) continue;
+    const out = {};
+    for (const d of m[2].split(';')) {
+      const i = d.indexOf(':');
+      if (i > 0) out[d.slice(0, i).trim()] = d.slice(i + 1).trim();
+    }
+    return out;
+  }
+  return null;
+}
 
 test('collapsible by default, unfolded by default: the item sits at the left edge, the bar is untouched', async () => {
   const { plugin, body, statusBar, ready } = loadPlugin({ icor: false });
@@ -399,11 +422,48 @@ test('collapsible by default, unfolded by default: the item sits at the left edg
   const item = itemOf(statusBar);
   assert.ok(item, 'no collapse item in the bar');
   assert.equal(statusBar.children[0], item, 'the collapse item is not the first thing in the bar');
-  assert.equal(item.getAttribute('aria-label'), 'Collapse status bar');
+  assert.equal(item.getAttribute('aria-label'), 'Fold status bar to the right');
   assert.equal(item.getAttribute('role'), 'button', 'the item is not reachable as a button');
   assert.ok(statusBar.children.some((c) => c.classSet.has('plugin-word-count')), 'a core item went missing');
-  assert.ok(fabOf(body), 'no expand button on the body');
-  assert.equal(fabOf(body).getAttribute('aria-label'), 'Expand status bar');
+  assert.ok(zoneOf(body), 'no hit zone on the body');
+  assert.ok(fabOf(body), 'no expand button inside the zone');
+  assert.equal(fabOf(body).getAttribute('aria-label'), 'Unfold status bar to the left');
+});
+
+test('the glyphs point the way the bar moves: the button left (it unfolds that way), the item right (it folds that way)', async () => {
+  const { plugin, body, statusBar, ready } = loadPlugin({ icor: false });
+  await plugin.onload(); ready();
+  assert.equal(fabOf(body).getAttribute('data-icon'), 'chevron-left', 'the round button does not point left');
+  assert.equal(itemOf(statusBar).getAttribute('data-icon'), 'chevron-right', 'the item does not point right');
+});
+
+test('the hover reveal is on by default, is a body class, and follows its setting', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: false, saved: { statusBarCollapsed: true } });
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.statusBarButtonOnHover, true, 'the reveal is not on by default');
+  assert.ok(body.classSet.has(HOVER_REVEAL), 'the reveal class is missing from body');
+  plugin.settings.statusBarButtonOnHover = false;
+  await plugin.saveSettings();
+  assert.ok(!body.classSet.has(HOVER_REVEAL), 'the reveal class outlived its setting');
+  plugin.settings.statusBarButtonOnHover = true;
+  await plugin.saveSettings();
+  assert.ok(body.classSet.has(HOVER_REVEAL), 'the reveal class did not come back');
+  plugin.onunload();
+  assert.ok(!body.classSet.has(HOVER_REVEAL), 'the reveal class outlived the plugin');
+});
+
+test('styles.css: with the reveal on, the folded button rests invisible and shows on hover of the zone and on keyboard focus', () => {
+  const rest = declarationsOf(styles, 'body.icor-status-bar-collapsed.icor-status-bar-hover-reveal .icor-status-bar-expand');
+  assert.ok(rest, 'no rest rule for the folded button under the reveal class');
+  assert.equal(rest.opacity, '0', 'the button is not invisible at rest');
+  assert.match(rest.transition || '', /^opacity /, 'the reveal is not a transition on opacity');
+  const hover = declarationsOf(styles, 'body.icor-status-bar-collapsed.icor-status-bar-hover-reveal .icor-status-bar-zone:hover .icor-status-bar-expand');
+  assert.equal(hover && hover.opacity, '1', 'hovering the zone does not reveal the button');
+  const focus = declarationsOf(styles, 'body.icor-status-bar-collapsed.icor-status-bar-hover-reveal .icor-status-bar-expand:focus-visible');
+  assert.equal(focus && focus.opacity, '1', 'keyboard focus does not reveal the button; a keyboard user would tab onto nothing');
+  const zone = declarationsOf(styles, 'body.icor-status-bar-collapsed .icor-status-bar-zone');
+  assert.equal(zone && zone.width, 'var(--size-4-16, 64px)', 'the hit zone is not the 64px square');
+  assert.equal(zone && zone.height, 'var(--size-4-16, 64px)', 'the hit zone is not the 64px square');
 });
 
 test('the item folds the bar, the round button unfolds it, and the fold is saved', async () => {
@@ -445,6 +505,7 @@ test('off leaves core untouched: no class, no item, no button, even with a saved
   await plugin.onload(); ready();
   assert.ok(!body.classSet.has(COLLAPSED), 'a saved fold was applied while the feature is off');
   assert.equal(itemOf(statusBar), null, 'an item was put in the bar while the feature is off');
+  assert.equal(zoneOf(body), null, 'a hit zone was put on the body while the feature is off');
   assert.equal(fabOf(body), null, 'a round button was put on the body while the feature is off');
   assert.equal(statusBar.children.length, 1, 'the bar is not exactly as the host built it');
 });
@@ -462,7 +523,8 @@ test('switching the feature off takes everything down, switching it on brings it
   await plugin.saveSettings();
   await plugin.saveSettings();
   assert.equal(statusBar.children.filter((c) => c.classSet.has('icor-status-bar-collapse')).length, 1, 'more than one item after re-enabling');
-  assert.equal(body.children.filter((c) => c.classSet.has('icor-status-bar-expand')).length, 1, 'more than one round button after re-enabling');
+  assert.equal(body.children.filter((c) => c.classSet.has('icor-status-bar-zone')).length, 1, 'more than one hit zone after re-enabling');
+  assert.equal(body.querySelectorAll('.icor-status-bar-expand').length, 1, 'more than one round button after re-enabling');
   assert.ok(body.classSet.has(COLLAPSED), 'the remembered fold did not come back with the feature');
 });
 
@@ -480,6 +542,7 @@ test('unload restores the bar fully and removes the round button', async () => {
   plugin.onunload();
   assert.ok(!body.classSet.has(COLLAPSED), 'the collapsed class outlived the plugin; the bar would stay hidden with nothing to unhide it');
   assert.equal(itemOf(statusBar), null, 'the item outlived the plugin');
+  assert.equal(zoneOf(body), null, 'the hit zone outlived the plugin');
   assert.equal(fabOf(body), null, 'the round button outlived the plugin');
   assert.ok(statusBar.children.some((c) => c.classSet.has('plugin-word-count')), 'a core item went missing on unload');
 });

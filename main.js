@@ -176,16 +176,37 @@ const DEFAULT_SETTINGS = {
   statusBarCollapsible: true,
   /* the fold itself, remembered across reloads */
   statusBarCollapsed: false,
+  /* folded, the round button is invisible until the pointer comes near it
+     (or it has keyboard focus); off, it is always visible */
+  statusBarButtonOnHover: true,
 };
 
 const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
 
-/* The collapsible status bar. The body class is what styles.css guards on;
-   the two element classes name the item at the bar's left edge and the round
-   button that stands in for the bar while it is folded. */
+/* The collapsible status bar. The two body classes are what styles.css
+   guards on: the fold, and the hover reveal of the round button. The three
+   element classes name the item at the bar's left edge, the round button
+   that stands in for the bar while it is folded, and the zone around that
+   button: a larger, transparent hit area anchored to the corner, so the
+   button shows before the pointer is on it. The zone is the hit area only;
+   the click lives on the button. */
 const STATUS_COLLAPSED_CLASS = 'icor-status-bar-collapsed';
+const STATUS_HOVER_CLASS = 'icor-status-bar-hover-reveal';
 const STATUS_ITEM_CLASS = 'icor-status-bar-collapse';
 const STATUS_FAB_CLASS = 'icor-status-bar-expand';
+const STATUS_ZONE_CLASS = 'icor-status-bar-zone';
+
+/* The bar sits at the bottom RIGHT and unfolds toward the LEFT, so the
+   glyphs point the way the bar moves: folded, the round button points left
+   (unfold that way); unfolded, the item points right (fold back that way).
+   Lucide's `panel-right-open` / `panel-right-close` exist and their inner
+   chevrons point the same ways, but the glyph is a side panel, the same
+   picture Obsidian uses for its sidebars, and at 14px inside a 22px button
+   its chevron is three units wide. The plain chevrons say one thing. */
+const STATUS_FAB_ICON = 'chevron-left';
+const STATUS_ITEM_ICON = 'chevron-right';
+const STATUS_FAB_LABEL = 'Unfold status bar to the left';
+const STATUS_ITEM_LABEL = 'Fold status bar to the right';
 
 /* The two folders that make a vault an ICOR for Life vault. Present together
  * at the root, and this plugin has never saved anything, the scaffold's own
@@ -373,9 +394,9 @@ class IcorInterfacePlugin extends Plugin {
       item.addClass(STATUS_ITEM_CLASS);
       item.setAttribute('role', 'button');
       item.setAttribute('tabindex', '0');
-      item.setAttribute('aria-label', 'Collapse status bar');
+      item.setAttribute('aria-label', STATUS_ITEM_LABEL);
       item.setAttribute('data-tooltip-position', 'top');
-      this.setIconWithFallback(item, 'panel-bottom-close', 'chevron-down');
+      setIcon(item, STATUS_ITEM_ICON);
       item.addEventListener('click', () => this.toggleStatusBar());
       item.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -388,25 +409,30 @@ class IcorInterfacePlugin extends Plugin {
     }
 
     if (!this.statusFab || !this.statusFab.parentElement) {
-      const fab = document.body.createEl('button', {
+      const zone = document.body.createDiv({ cls: STATUS_ZONE_CLASS });
+      const fab = zone.createEl('button', {
         cls: STATUS_FAB_CLASS,
-        attr: { 'aria-label': 'Expand status bar', 'data-tooltip-position': 'top', type: 'button' },
+        attr: { 'aria-label': STATUS_FAB_LABEL, 'data-tooltip-position': 'top', type: 'button' },
       });
-      this.setIconWithFallback(fab, 'panel-bottom-open', 'chevron-up');
+      setIcon(fab, STATUS_FAB_ICON);
       fab.addEventListener('click', () => this.toggleStatusBar());
+      this.statusZone = zone;
       this.statusFab = fab;
     }
 
     document.body.classList.toggle(STATUS_COLLAPSED_CLASS, !!this.settings.statusBarCollapsed);
+    document.body.classList.toggle(STATUS_HOVER_CLASS, !!this.settings.statusBarButtonOnHover);
   }
 
-  /* Everything the feature put in place comes off: the class, the item,
-     the button. Obsidian's own bar is exactly as it was. */
+  /* Everything the feature put in place comes off: the classes, the item,
+     the zone with its button. Obsidian's own bar is exactly as it was. */
   teardownStatusBar() {
     document.body.classList.remove(STATUS_COLLAPSED_CLASS);
+    document.body.classList.remove(STATUS_HOVER_CLASS);
     if (this.statusItem) this.statusItem.remove();
-    if (this.statusFab) this.statusFab.remove();
+    if (this.statusZone) this.statusZone.remove();
     this.statusItem = null;
+    this.statusZone = null;
     this.statusFab = null;
   }
 
@@ -417,14 +443,6 @@ class IcorInterfacePlugin extends Plugin {
        a keyboard user is never left on a hidden element. */
     const next = this.settings.statusBarCollapsed ? this.statusFab : this.statusItem;
     if (next && typeof next.focus === 'function') next.focus();
-  }
-
-  /* Lucide gains icons between Obsidian releases. Ask for the newer glyph
-     first and, if the app has no svg for it, fall back to one it has had
-     since the start. */
-  setIconWithFallback(el, iconId, fallbackId) {
-    setIcon(el, iconId);
-    if (!el.querySelector('svg')) setIcon(el, fallbackId);
   }
 
   /* ------------------------------------------------------------ folders -- */
@@ -891,11 +909,21 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
        five above. */
     new Setting(containerEl)
       .setName('Collapsible status bar')
-      .setDesc('The status bar folds away to a small round button at the bottom right, where the bar itself sits. The button, the item at the left edge of the bar and the command "Toggle status bar" all flip it, and the fold is remembered. Collapsed, everything in the bar is out of sight, plugin indicators included, such as the Git status dot. Off, Obsidian\'s status bar is left exactly as it is.')
+      .setDesc('The status bar folds away to a small round button at the bottom right, where the bar itself sits; the button points left, the way the bar unfolds, and the item at the bar\'s left edge points right, the way it folds. The button, the item and the command "Toggle status bar" all flip it, and the fold is remembered. Collapsed, everything in the bar is out of sight, plugin indicators included, such as the Git status dot. Off, Obsidian\'s status bar is left exactly as it is.')
       .addToggle((t) => t
         .setValue(!!this.plugin.settings.statusBarCollapsible)
         .onChange(async (v) => {
           this.plugin.settings.statusBarCollapsible = v;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('Show the fold button only on hover')
+      .setDesc('While the bar is folded, the round button stays invisible until the pointer comes near the bottom right corner, or the button has keyboard focus. Off, the button is always visible.')
+      .addToggle((t) => t
+        .setValue(!!this.plugin.settings.statusBarButtonOnHover)
+        .onChange(async (v) => {
+          this.plugin.settings.statusBarButtonOnHover = v;
           await this.plugin.saveSettings();
         }));
   }

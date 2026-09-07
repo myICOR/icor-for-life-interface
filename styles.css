@@ -231,20 +231,31 @@ body.icor-status-bar-collapsed .status-bar {
   display: none;
 }
 
-/* The round button: hidden until the bar is folded, then fixed at the bottom
-   RIGHT, in the corner the bar itself lives in: its right edge on the bar's
-   right padding and its bottom on the bar's bottom, so it stands exactly
-   where the bar's last item was. The bottom left is taken (the ribbon's
-   last icon, and Connect's account footer); measured against both on
-   0.6.3. */
-body .icor-status-bar-expand {
+/* The zone and the round button: hidden until the bar is folded. The zone is
+   a transparent square fixed to the bottom RIGHT, the corner the bar itself
+   lives in, and it is the hit area: the pointer entering it is what reveals
+   the button. The button sits in the zone's bottom right corner, its right
+   edge on the bar's right padding and its bottom on the bar's bottom, so it
+   stands exactly where the bar's last item was. The bottom left is taken
+   (the ribbon's last icon, and Connect's account footer); measured against
+   both on 0.6.3. The zone swallows what lands in it, as the bar's own
+   footprint does while unfolded; --size-4-16 is 64px on 1.5.0. */
+body .icor-status-bar-zone {
   display: none;
 }
-body.icor-status-bar-collapsed .icor-status-bar-expand {
+body.icor-status-bar-collapsed .icor-status-bar-zone {
   position: fixed;
+  right: 0;
+  bottom: 0;
+  z-index: var(--layer-status-bar, 15);
+  display: block;
+  width: var(--size-4-16, 64px);
+  height: var(--size-4-16, 64px);
+}
+body.icor-status-bar-collapsed .icor-status-bar-expand {
+  position: absolute;
   right: var(--size-4-1, 4px);
   bottom: var(--size-4-1, 4px);
-  z-index: var(--layer-status-bar, 15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -269,7 +280,22 @@ body.icor-status-bar-collapsed .icor-status-bar-expand:hover {
 body.icor-status-bar-collapsed .icor-status-bar-expand:focus-visible {
   box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
 }
+
+/* The hover reveal: at rest the button is invisible, and the pointer coming
+   into the zone, or keyboard focus landing on the button, fades it in on
+   Obsidian's own fast duration. Only where a pointer can hover: a device
+   with no hover has no way to reveal it, and gets it always visible. */
+@media (hover: hover) {
+  body.icor-status-bar-collapsed.icor-status-bar-hover-reveal .icor-status-bar-expand {
+    opacity: 0;
+    transition: opacity var(--anim-duration-fast, 140ms) var(--anim-motion-smooth, ease);
+  }
+  body.icor-status-bar-collapsed.icor-status-bar-hover-reveal .icor-status-bar-zone:hover .icor-status-bar-expand,
+  body.icor-status-bar-collapsed.icor-status-bar-hover-reveal .icor-status-bar-expand:focus-visible {
+    opacity: 1;
+  }
+}
 /* No status bar on mobile, so nothing to unfold. */
-body.is-mobile .icor-status-bar-expand {
+body.is-mobile .icor-status-bar-zone {
   display: none;
 }

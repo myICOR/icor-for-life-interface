@@ -7,6 +7,38 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## [0.6.5] - 2026-09-07
+
+### Changed
+- The two fold glyphs point the way the bar moves. The bar sits at the
+  bottom right and unfolds toward the left, so the round button now shows
+  `chevron-left` ("Unfold status bar to the left") and the item at the bar's
+  left edge shows `chevron-right` ("Fold status bar to the right"). 0.6.4
+  showed `panel-bottom-open`, a square with a chevron pointing up, which
+  pointed nowhere the bar goes. Lucide's `panel-right-open` / `-close` were
+  considered and passed over: the glyph is a side panel, the picture
+  Obsidian uses for its sidebars, and its chevron is three units wide at
+  14px.
+
+### Added
+- **The fold button shows on approach.** Folded, the round button is
+  invisible until the pointer comes near the bottom right corner: a 64px
+  transparent zone (`--size-4-16`) anchored to the corner is the hit area,
+  and the button fades in on Obsidian's `--anim-duration-fast` when the
+  pointer enters it, or when the button has keyboard focus (`:focus-visible`),
+  so a keyboard user tabs onto a visible control. CSS only, no pointer
+  listener. Setting "Show the fold button only on hover", on by default;
+  off, the button is always visible. Devices without hover (`hover: none`)
+  always see it. The zone swallows what lands in its 64px square while the
+  bar is folded, as the bar's own footprint does while unfolded.
+- Four gates for the above (both glyph ids, both labels, the body class
+  following its setting, and a pin on the rest-opacity, hover and focus
+  rules in styles.css), seen red first.
+
+### Removed
+- `setIconWithFallback`: both chevrons have been in Lucide from the start,
+  so there is nothing to fall back to.
+
 ## [0.6.4] - 2026-09-07
 
 ### Changed
