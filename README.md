@@ -88,6 +88,24 @@ Requires Obsidian 1.5.0 or newer and the ICOR for Life - INKLINE theme.
 - **Manually:** copy `main.js`, `manifest.json` and `styles.css` from the
   latest release into `.obsidian/plugins/icor-for-life-interface/`.
 
+## Releasing
+
+A release is cut only when a version tag is pushed. A plain push to `main`
+never releases anything.
+
+1. Bump the version in three files: `manifest.json`, `versions.json` (new
+   line, same `minAppVersion`) and `package.json`. Add the CHANGELOG entry.
+2. Push to `main`. Nothing ships yet.
+3. Flint reads the diff before ship. No read, no tag.
+4. Tag the commit with the bare version and push the tag:
+   `git tag -a 0.6.4 -m "ICOR for Life - Interface 0.6.4" && git push github 0.6.4`
+   (never `v0.6.4`: the Obsidian directory reads the tag as the version).
+
+The Release workflow refuses a tag that does not equal `manifest.json`'s
+version or that is not on `main`, then publishes `main.js`, `manifest.json`
+and `styles.css` with the commit subjects since the previous tag as notes.
+The nightly version gate still checks that tag, branch and release agree.
+
 ## ICOR for Life Obsidian Edition
 
 Part of the ICOR for Life suite: Planner, Focus, Connect, Diagrams, Chat, and
