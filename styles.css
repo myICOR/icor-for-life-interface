@@ -1,8 +1,8 @@
 /* ICOR for Life - Interface.
    The chrome switches and the folder rows are drawn by the INKLINE theme and
-   have no CSS here. This file carries the two things that must work on any
-   theme: the Outline depth rules and the diagram viewer, plus the settings
-   tab's own controls. */
+   have no CSS here. This file carries the three things that must work on
+   any theme: the Outline depth rules, the diagram viewer and the collapsible
+   status bar, plus the settings tab's own controls. */
 
 .icor-if-icon-suggestion {
   display: flex;
@@ -203,3 +203,75 @@
   border-color: var(--ink-marker, #ff5a2d);
 }
 .icor-diag-ctl svg { width: 16px; height: 16px; }
+
+/* ------------------------------------------------------------- status bar --
+   Obsidian docks .status-bar at the bottom right of the main window (fixed,
+   width auto). The plugin puts ONE class on body while the bar is folded,
+   one item at the bar's left edge that folds it, and one round button on the
+   body that unfolds it. Folded, the whole bar is out of the document flow,
+   so anything that measures it sees the truth: nothing there. Every token
+   falls back for vanilla themes; the round button reads the bar's own
+   variables so it looks like a piece of the bar it stands in for. */
+
+.status-bar-item.icor-status-bar-collapse {
+  display: flex;
+  align-items: center;
+  /* No vertical padding: the glyph is taller than the bar's 11px text line,
+     and with the item's own 3px top and bottom it would stretch every item
+     in the row by 3px. Measured live on 0.6.3, bar 29px against 26px. */
+  padding-block: 0;
+  padding-inline: var(--size-4-1, 4px);
+}
+.status-bar-item.icor-status-bar-collapse svg {
+  width: var(--icon-xs, 14px);
+  height: var(--icon-xs, 14px);
+}
+
+body.icor-status-bar-collapsed .status-bar {
+  display: none;
+}
+
+/* The round button: hidden until the bar is folded, then fixed at the bottom
+   left, to the RIGHT of the ribbon column so the ribbon's last icon is never
+   covered, and flush left when the ribbon is hidden (by Obsidian's own
+   setting, or by this plugin's switch through the theme). */
+body .icor-status-bar-expand {
+  display: none;
+}
+body.icor-status-bar-collapsed .icor-status-bar-expand {
+  position: fixed;
+  left: calc(var(--ribbon-width, 44px) + var(--size-4-1, 4px));
+  bottom: var(--size-4-1, 4px);
+  z-index: var(--layer-status-bar, 15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--icon-xs, 14px) + var(--size-4-2, 8px));
+  height: calc(var(--icon-xs, 14px) + var(--size-4-2, 8px));
+  padding: 0;
+  border-radius: 50%;
+  background: var(--status-bar-background, var(--background-secondary));
+  border: 1px solid var(--status-bar-border-color, var(--background-modifier-border));
+  box-shadow: none;
+  color: var(--status-bar-text-color, var(--text-muted));
+  cursor: var(--cursor, pointer);
+}
+body.icor-status-bar-collapsed:not(.show-ribbon) .icor-status-bar-expand,
+body.icor-status-bar-collapsed.icor-hide-ribbon .icor-status-bar-expand {
+  left: var(--size-4-1, 4px);
+}
+.icor-status-bar-expand svg {
+  width: var(--icon-xs, 14px);
+  height: var(--icon-xs, 14px);
+}
+body.icor-status-bar-collapsed .icor-status-bar-expand:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+body.icor-status-bar-collapsed .icor-status-bar-expand:focus-visible {
+  box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+/* No status bar on mobile, so nothing to unfold. */
+body.is-mobile .icor-status-bar-expand {
+  display: none;
+}

@@ -31,6 +31,11 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
    renders for them. `icor` decides whether the two ICOR marker rooms exist. */
 function loadPlugin({ saved = null, icor = true, styleSettings = false, folders = null } = {}) {
   const body = new FakeEl('body');
+  /* The host's status bar, with one core item in it, exists before any
+     plugin loads. */
+  const statusBar = body.createDiv({ cls: 'status-bar' });
+  statusBar.createDiv({ cls: 'status-bar-item plugin-word-count', text: '12 words' });
+  const commands = [];
   const explorer = body.createDiv({ cls: 'workspace-leaf-content', attr: { 'data-type': 'file-explorer' } });
   const tree = explorer.createDiv({ cls: 'nav-files-container' });
 
@@ -67,6 +72,9 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
       registerEvent() {}
       registerMarkdownPostProcessor() {}
       registerDomEvent() {}
+      addCommand(c) { commands.push(c); }
+      /* the host appends a fresh item at the end of the bar */
+      addStatusBarItem() { return statusBar.createDiv({ cls: 'status-bar-item plugin-icor-for-life-interface' }); }
     },
     PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },
     Setting: class { constructor() {} setName() { return this; } setDesc() { return this; } setHeading() { return this; } addToggle() { return this; } addButton() { return this; } addText() { return this; } addDropdown() { return this; } addExtraButton() { return this; } addColorPicker() { return this; } },
@@ -74,6 +82,7 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
     AbstractInputSuggest: class { constructor() {} },
     Modal: class { constructor(app) { this.app = app; } open() {} },
     Notice: class {},
+    Platform: { isMobile: false, isDesktop: true },
     TFolder,
     setIcon: () => {},
     getIconIds: () => ['lucide-folder', 'lucide-sprout', 'lucide-bot'],
@@ -110,7 +119,7 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
   };
   const PluginClass = sandbox.module.exports;
   const plugin = new PluginClass(app, { id: 'icor-for-life-interface', version: '0.0.0-gate' });
-  return { plugin, body, explorer, tree, buildRows, savedData, ready: () => layoutReady.forEach((f) => f()) };
+  return { plugin, body, explorer, tree, statusBar, commands, buildRows, savedData, ready: () => layoutReady.forEach((f) => f()) };
 }
 
 /* By attribute value rather than by selector: the fake engine splits selectors
@@ -372,4 +381,105 @@ test('unload removes the outline depth class', async () => {
   assert.ok(body.classSet.has('icor-outline-depth-3'));
   plugin.onunload();
   assert.ok(![...body.classSet].some((c) => c.startsWith('icor-outline-depth-')), 'the depth class outlived the plugin');
+});
+
+/* ----------------------------------------------------------- status bar -- */
+
+const COLLAPSED = 'icor-status-bar-collapsed';
+const fabOf = (body) => body.children.find((c) => c.classSet.has('icor-status-bar-expand')) || null;
+const itemOf = (bar) => bar.children.find((c) => c.classSet.has('icor-status-bar-collapse')) || null;
+const toggleCommand = (commands) => commands.find((c) => c.id === 'toggle-status-bar');
+
+test('collapsible by default, unfolded by default: the item sits at the left edge, the bar is untouched', async () => {
+  const { plugin, body, statusBar, ready } = loadPlugin({ icor: false });
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.statusBarCollapsible, true, 'the feature is not on by default');
+  assert.equal(plugin.settings.statusBarCollapsed, false, 'a fresh vault starts folded');
+  assert.ok(!body.classSet.has(COLLAPSED), 'the collapsed class is on body while unfolded');
+  const item = itemOf(statusBar);
+  assert.ok(item, 'no collapse item in the bar');
+  assert.equal(statusBar.children[0], item, 'the collapse item is not the first thing in the bar');
+  assert.equal(item.getAttribute('aria-label'), 'Collapse status bar');
+  assert.equal(item.getAttribute('role'), 'button', 'the item is not reachable as a button');
+  assert.ok(statusBar.children.some((c) => c.classSet.has('plugin-word-count')), 'a core item went missing');
+  assert.ok(fabOf(body), 'no expand button on the body');
+  assert.equal(fabOf(body).getAttribute('aria-label'), 'Expand status bar');
+});
+
+test('the item folds the bar, the round button unfolds it, and the fold is saved', async () => {
+  const { plugin, body, statusBar, ready, savedData } = loadPlugin({ icor: false });
+  await plugin.onload(); ready();
+  itemOf(statusBar).click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(body.classSet.has(COLLAPSED), 'clicking the item did not fold the bar');
+  assert.equal(savedData.value.statusBarCollapsed, true, 'the fold was not saved');
+  fabOf(body).click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(!body.classSet.has(COLLAPSED), 'clicking the round button did not unfold the bar');
+  assert.equal(savedData.value.statusBarCollapsed, false, 'the unfold was not saved');
+});
+
+test('a saved fold survives a reload', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: false, saved: { statusBarCollapsed: true } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has(COLLAPSED), 'the bar came back unfolded after a reload');
+});
+
+test('the command "Toggle status bar" flips the fold, and is offered only while the feature is on', async () => {
+  const { plugin, body, commands, ready } = loadPlugin({ icor: false });
+  await plugin.onload(); ready();
+  const cmd = toggleCommand(commands);
+  assert.ok(cmd, 'no toggle-status-bar command registered');
+  assert.equal(cmd.name, 'Toggle status bar');
+  assert.equal(cmd.checkCallback(true), true, 'the command is not offered while the feature is on');
+  cmd.checkCallback(false);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.ok(body.classSet.has(COLLAPSED), 'the command did not fold the bar');
+  plugin.settings.statusBarCollapsible = false;
+  await plugin.saveSettings();
+  assert.equal(cmd.checkCallback(true), false, 'the command is offered while the feature is off; a hotkey to it would do nothing');
+});
+
+test('off leaves core untouched: no class, no item, no button, even with a saved fold', async () => {
+  const { plugin, body, statusBar, ready } = loadPlugin({ icor: false, saved: { statusBarCollapsible: false, statusBarCollapsed: true } });
+  await plugin.onload(); ready();
+  assert.ok(!body.classSet.has(COLLAPSED), 'a saved fold was applied while the feature is off');
+  assert.equal(itemOf(statusBar), null, 'an item was put in the bar while the feature is off');
+  assert.equal(fabOf(body), null, 'a round button was put on the body while the feature is off');
+  assert.equal(statusBar.children.length, 1, 'the bar is not exactly as the host built it');
+});
+
+test('switching the feature off takes everything down, switching it on brings it back once', async () => {
+  const { plugin, body, statusBar, ready } = loadPlugin({ icor: false, saved: { statusBarCollapsed: true } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has(COLLAPSED));
+  plugin.settings.statusBarCollapsible = false;
+  await plugin.saveSettings();
+  assert.ok(!body.classSet.has(COLLAPSED), 'the class outlived the switch');
+  assert.equal(itemOf(statusBar), null, 'the item outlived the switch');
+  assert.equal(fabOf(body), null, 'the round button outlived the switch');
+  plugin.settings.statusBarCollapsible = true;
+  await plugin.saveSettings();
+  await plugin.saveSettings();
+  assert.equal(statusBar.children.filter((c) => c.classSet.has('icor-status-bar-collapse')).length, 1, 'more than one item after re-enabling');
+  assert.equal(body.children.filter((c) => c.classSet.has('icor-status-bar-expand')).length, 1, 'more than one round button after re-enabling');
+  assert.ok(body.classSet.has(COLLAPSED), 'the remembered fold did not come back with the feature');
+});
+
+test('the status bar is this plugin\'s own and is applied even when Style Settings owns the five switches', async () => {
+  const { plugin, body, statusBar, ready } = loadPlugin({ icor: false, styleSettings: true, saved: { statusBarCollapsed: true } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has(COLLAPSED), 'the fold was skipped because Style Settings is installed');
+  assert.ok(itemOf(statusBar), 'the item was skipped because Style Settings is installed');
+});
+
+test('unload restores the bar fully and removes the round button', async () => {
+  const { plugin, body, statusBar, ready } = loadPlugin({ icor: false, saved: { statusBarCollapsed: true } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has(COLLAPSED));
+  plugin.onunload();
+  assert.ok(!body.classSet.has(COLLAPSED), 'the collapsed class outlived the plugin; the bar would stay hidden with nothing to unhide it');
+  assert.equal(itemOf(statusBar), null, 'the item outlived the plugin');
+  assert.equal(fabOf(body), null, 'the round button outlived the plugin');
+  assert.ok(statusBar.children.some((c) => c.classSet.has('plugin-word-count')), 'a core item went missing on unload');
 });

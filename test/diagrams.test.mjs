@@ -36,6 +36,8 @@ function loadPlugin({ saved = {} } = {}) {
       registerEvent() {}
       registerMarkdownPostProcessor(fn) { hooks.postProcessors.push(fn); }
       registerDomEvent(el, type, fn) { hooks.domEvents.push({ type, fn }); }
+      addCommand() {}
+      addStatusBarItem() { return body.createDiv({ cls: 'status-bar-item' }); }
     },
     PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },
     Setting: class { setName() { return this; } setDesc() { return this; } setHeading() { return this; } addToggle() { return this; } addButton() { return this; } addText() { return this; } addDropdown() { return this; } addExtraButton() { return this; } addColorPicker() { return this; } },
@@ -43,6 +45,7 @@ function loadPlugin({ saved = {} } = {}) {
     AbstractInputSuggest: class {},
     Modal: class { constructor(app) { this.app = app; } open() { this.opened = true; } },
     Notice: class {},
+    Platform: { isMobile: false, isDesktop: true },
     TFolder: class {},
     setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
     getIconIds: () => [],

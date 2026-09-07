@@ -29,6 +29,11 @@
  * plugin serialises it into the `url("data:image/svg+xml,...")` the theme
  * masks with. No icon set is bundled.
  *
+ * Three things carry their own small stylesheet because they must work on
+ * any theme: the Outline depth rules, the diagram viewer, and the
+ * collapsible status bar (one body class, one item in the bar, one round
+ * button at the bottom left of the main window).
+ *
  * Hand-written CommonJS, no build step, like the rest of the suite.
  */
 
@@ -36,7 +41,7 @@
 
 const {
   Plugin, PluginSettingTab, Setting, FuzzySuggestModal, AbstractInputSuggest, Modal,
-  getIcon, getIconIds, setIcon, Notice, TFolder,
+  getIcon, getIconIds, setIcon, Notice, TFolder, Platform,
 } = require('obsidian');
 
 /* --------------------------------------------------------------- switches --
@@ -166,9 +171,21 @@ const DEFAULT_SETTINGS = {
   outlineDepth: 0,
   /* the fullscreen button on rendered mermaid diagrams */
   diagramsEnabled: true,
+  /* the status bar folds away to a round button at the bottom left; off
+     leaves Obsidian's bar exactly as it is */
+  statusBarCollapsible: true,
+  /* the fold itself, remembered across reloads */
+  statusBarCollapsed: false,
 };
 
 const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
+
+/* The collapsible status bar. The body class is what styles.css guards on;
+   the two element classes name the item at the bar's left edge and the round
+   button that stands in for the bar while it is folded. */
+const STATUS_COLLAPSED_CLASS = 'icor-status-bar-collapsed';
+const STATUS_ITEM_CLASS = 'icor-status-bar-collapse';
+const STATUS_FAB_CLASS = 'icor-status-bar-expand';
 
 /* The two folders that make a vault an ICOR for Life vault. Present together
  * at the root, and this plugin has never saved anything, the scaffold's own
@@ -204,6 +221,18 @@ class IcorInterfacePlugin extends Plugin {
     if (saved === null || saved === undefined) this.applyFirstRunDefaults();
 
     this.addSettingTab(new IcorInterfaceSettingTab(this.app, this));
+
+    /* Only offered while the status bar is collapsible: a hotkey that does
+       nothing is worse than a command that is not there. */
+    this.addCommand({
+      id: 'toggle-status-bar',
+      name: 'Toggle status bar',
+      checkCallback: (checking) => {
+        if (!this.statusBarFeatureActive()) return false;
+        if (!checking) this.toggleStatusBar();
+        return true;
+      },
+    });
 
     this.app.workspace.onLayoutReady(() => {
       this.applyChrome();
@@ -243,6 +272,7 @@ class IcorInterfacePlugin extends Plugin {
        rendering a configuration nobody can edit any more. */
     for (const s of SWITCHES) document.body.classList.remove(s.cls);
     this.applyOutline(0);
+    this.teardownStatusBar();
     for (const row of document.querySelectorAll(`[${MANAGED}]`)) this.releaseRow(row);
     this.removeDiagramButtons();
   }
@@ -297,6 +327,7 @@ class IcorInterfacePlugin extends Plugin {
      settings tab says so. */
   applyChrome() {
     this.applyOutline(this.settings.outlineDepth);
+    this.applyStatusBar();
     if (this.styleSettingsActive()) return;
     for (const s of SWITCHES) {
       const on = !!this.settings[s.key];
@@ -314,6 +345,86 @@ class IcorInterfacePlugin extends Plugin {
       if (cls.startsWith(OUTLINE_DEPTH_PREFIX)) document.body.classList.remove(cls);
     }
     if (d > 0) document.body.classList.add(OUTLINE_DEPTH_PREFIX + d);
+  }
+
+  /* --------------------------------------------------------- status bar --
+     Obsidian docks the status bar at the bottom right of the MAIN window;
+     pop-out windows have none, so there is nothing to fold there and the
+     round button exists only in the main window. Mobile has no status bar
+     either, and the feature stays out of the way there entirely. */
+
+  statusBarFeatureActive() {
+    return !!this.settings.statusBarCollapsible && !Platform.isMobile;
+  }
+
+  statusBarEl() {
+    return document.querySelector('.status-bar');
+  }
+
+  /* Idempotent: called on layout-ready, on every layout change and after
+     every save. Builds the two controls once, then only moves the class. */
+  applyStatusBar() {
+    const bar = this.statusBarEl();
+    if (!this.statusBarFeatureActive() || !bar) { this.teardownStatusBar(); return; }
+
+    if (!this.statusItem || !this.statusItem.parentElement) {
+      const item = this.addStatusBarItem();
+      item.addClass('mod-clickable');
+      item.addClass(STATUS_ITEM_CLASS);
+      item.setAttribute('role', 'button');
+      item.setAttribute('tabindex', '0');
+      item.setAttribute('aria-label', 'Collapse status bar');
+      item.setAttribute('data-tooltip-position', 'top');
+      this.setIconWithFallback(item, 'panel-bottom-close', 'chevron-down');
+      item.addEventListener('click', () => this.toggleStatusBar());
+      item.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        this.toggleStatusBar();
+      });
+      /* The left edge: everything else in the bar is appended after it. */
+      bar.prepend(item);
+      this.statusItem = item;
+    }
+
+    if (!this.statusFab || !this.statusFab.parentElement) {
+      const fab = document.body.createEl('button', {
+        cls: STATUS_FAB_CLASS,
+        attr: { 'aria-label': 'Expand status bar', 'data-tooltip-position': 'top', type: 'button' },
+      });
+      this.setIconWithFallback(fab, 'panel-bottom-open', 'chevron-up');
+      fab.addEventListener('click', () => this.toggleStatusBar());
+      this.statusFab = fab;
+    }
+
+    document.body.classList.toggle(STATUS_COLLAPSED_CLASS, !!this.settings.statusBarCollapsed);
+  }
+
+  /* Everything the feature put in place comes off: the class, the item,
+     the button. Obsidian's own bar is exactly as it was. */
+  teardownStatusBar() {
+    document.body.classList.remove(STATUS_COLLAPSED_CLASS);
+    if (this.statusItem) this.statusItem.remove();
+    if (this.statusFab) this.statusFab.remove();
+    this.statusItem = null;
+    this.statusFab = null;
+  }
+
+  async toggleStatusBar() {
+    this.settings.statusBarCollapsed = !this.settings.statusBarCollapsed;
+    await this.saveSettings();
+    /* The control that was just used disappears; focus follows the fold so
+       a keyboard user is never left on a hidden element. */
+    const next = this.settings.statusBarCollapsed ? this.statusFab : this.statusItem;
+    if (next && typeof next.focus === 'function') next.focus();
+  }
+
+  /* Lucide gains icons between Obsidian releases. Ask for the newer glyph
+     first and, if the app has no svg for it, fall back to one it has had
+     since the start. */
+  setIconWithFallback(el, iconId, fallbackId) {
+    setIcon(el, iconId);
+    if (!el.querySelector('svg')) setIcon(el, fallbackId);
   }
 
   /* ------------------------------------------------------------ folders -- */
@@ -769,12 +880,24 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName('Style Settings is installed and owns these switches')
         .setDesc('Find the same five under Settings, Style Settings, ICOR for Life - INKLINE. This plugin steps aside so the two never disagree.');
-      return;
+    } else {
+      for (const s of SWITCHES) {
+        if (s.key === 'roomIcons') continue;   /* lives with the folders */
+        this.renderSwitch(containerEl, s);
+      }
     }
-    for (const s of SWITCHES) {
-      if (s.key === 'roomIcons') continue;   /* lives with the folders */
-      this.renderSwitch(containerEl, s);
-    }
+
+    /* Not a theme class, so it is this plugin's whichever plugin owns the
+       five above. */
+    new Setting(containerEl)
+      .setName('Collapsible status bar')
+      .setDesc('The status bar folds away to a small round button at the bottom left. The button, the item at the left edge of the bar and the command "Toggle status bar" all flip it, and the fold is remembered. Collapsed, everything in the bar is out of sight, plugin indicators included, such as the Git status dot. Off, Obsidian\'s status bar is left exactly as it is.')
+      .addToggle((t) => t
+        .setValue(!!this.plugin.settings.statusBarCollapsible)
+        .onChange(async (v) => {
+          this.plugin.settings.statusBarCollapsible = v;
+          await this.plugin.saveSettings();
+        }));
   }
 
   renderSwitch(containerEl, s) {

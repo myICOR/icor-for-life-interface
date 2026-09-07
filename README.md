@@ -6,8 +6,9 @@ shown, and which folders carry a colour, an icon and a label.
 **It writes no CSS for what the theme owns.** The [ICOR for Life - INKLINE](https://github.com/myICOR/icor-for-life-inkline)
 theme draws the chrome and the folders; this plugin owns the settings the
 theme reads. Install the theme first, or those switches move and change
-nothing. Two things carry their own small stylesheet, the Outline depth rules
-and the diagram viewer, because both have to work on any theme.
+nothing. Three things carry their own small stylesheet, the Outline depth
+rules, the diagram viewer and the collapsible status bar, because all three
+have to work on any theme.
 
 **Beta.** In daily use in a real vault; rough edges likely. Open an issue.
 
@@ -28,6 +29,14 @@ theme's classes are the negations, and the plugin does the negating so you
 never read a double negative. If you have the Style Settings plugin
 installed it owns those same five classes, and this plugin steps aside so
 the two never disagree.
+
+**Status bar.** Collapsible, on by default. A small item at the left edge
+of the bar folds it away; a round button at the bottom left of the window
+unfolds it; the command "Toggle status bar" flips it from a hotkey. The
+fold is remembered across reloads. Collapsed, everything in the bar is out
+of sight, plugin indicators included, such as the Git status dot. Main
+window only, since pop-out windows have no status bar. Switch it off and
+Obsidian's bar is left exactly as it is.
 
 **Outline.** Obsidian's own Outline pane (a core plugin) lists every heading.
 Set how deep it goes, from all levels down to one. This counts levels of
