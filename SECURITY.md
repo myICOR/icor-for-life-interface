@@ -15,7 +15,7 @@ Two channels, in order of preference:
    [Security tab](https://github.com/myICOR/icor-for-life-interface/security/advisories/new)
    of this repository and open a draft advisory. This keeps the report private
    between you and the maintainer until a fix ships.
-2. **Email** `team@myicor.com` with `SECURITY` and `icor-for-life-interface` in the subject
+2. **Email** `support@myicor.com` with `SECURITY` and `icor-for-life-interface` in the subject
    line. This is a monitored mailbox.
 
 A useful report contains:
