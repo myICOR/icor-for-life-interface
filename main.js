@@ -255,6 +255,19 @@ class IcorInterfacePlugin extends Plugin {
       },
     });
 
+    /* Same shape as the status-bar command and for the same reason: with the
+       core File explorer turned off there is no leaf to flip, so the command
+       withdraws rather than offering a hotkey that does nothing. */
+    this.addCommand({
+      id: 'toggle-auto-reveal',
+      name: 'Toggle auto-reveal current file in the file explorer',
+      checkCallback: (checking) => {
+        if (this.autoRevealState() === null) return false;
+        if (!checking) this.toggleAutoReveal();
+        return true;
+      },
+    });
+
     this.app.workspace.onLayoutReady(() => {
       this.applyChrome();
       this.applyFolders();
@@ -443,6 +456,84 @@ class IcorInterfacePlugin extends Plugin {
        a keyboard user is never left on a hidden element. */
     const next = this.settings.statusBarCollapsed ? this.statusFab : this.statusItem;
     if (next && typeof next.focus === 'function') next.focus();
+  }
+
+  /* -------------------------------------------------------- auto-reveal --
+   * "Auto-reveal current file" is Obsidian's own switch: with it on, opening
+   * a note highlights it in the folder tree. The host offers exactly one way
+   * to flip it - a button on the file-explorer toolbar - and registers no
+   * command for it, so it cannot be bound to a hotkey and cannot be reached
+   * from the command palette. Measured against the Obsidian 1.13.7 bundle on
+   * 2026-09-17: eight `file-explorer:` command ids and not one touches
+   * autoReveal. A suite that reduces that toolbar has to put the switch back
+   * somewhere, and this plugin is where the host's own controls live.
+   *
+   * THE STATE IS NOT COPIED INTO data.json, and that is the design. It
+   * belongs to Obsidian's workspace layout, which is where the host reads it
+   * from on the next start; a second copy here would be a second writer on
+   * one setting, the same fight `applyChrome` steps out of when Style
+   * Settings is installed. So this reads and writes the live leaf and keeps
+   * nothing.
+   *
+   * Through the public leaf API only: `getViewState()` to read, and
+   * `setViewState()` with the SAME view type to write, which the host
+   * forwards straight to the view's `setState` without rebuilding the view -
+   * so the tree keeps its scroll position and its open folders. `active` is
+   * deliberately absent from the object: it would pull focus into the
+   * sidebar, and this command is meant to be usable from the note you are
+   * writing. `requestSaveLayout` is the host's own call for "this is worth
+   * persisting", and it is needed because a same-type setViewState does not
+   * trigger a layout save on its own. */
+  fileExplorerLeaf() {
+    const ws = this.app.workspace;
+    const leaves = ws && typeof ws.getLeavesOfType === 'function'
+      ? ws.getLeavesOfType('file-explorer') : null;
+    return (leaves && leaves.length) ? leaves[0] : null;
+  }
+
+  /* true, false, or null for "there is nothing to ask". The three answers are
+     distinct on purpose: null is what makes the command withdraw instead of
+     reporting a state it invented.
+
+     THE KEY IS THE CAPABILITY PROBE, not a default. Auto-reveal arrived in
+     Obsidian 1.8.3 (desktop, 2025-01-30) and this manifest floors at 1.5.0,
+     because every API used here predates that and raising the floor would shut
+     members out of the whole plugin for one toggle. On 1.5.0 to 1.8.2 the file
+     explorer emits no `autoReveal` and ignores one on write, so reading an
+     absent key as `false` would offer a switch that writes nowhere and a
+     notice that says ON while nothing happened. From 1.8.3 the host always
+     emits it as a boolean, so `typeof === 'boolean'` is an exact probe for
+     "this Obsidian has the setting". (Flint, review of 0.7.0, 2026-09-17.) */
+  autoRevealState() {
+    const leaf = this.fileExplorerLeaf();
+    if (!leaf || typeof leaf.getViewState !== 'function') return null;
+    const view = leaf.getViewState();
+    const state = (view && view.state) || {};
+    return typeof state.autoReveal === 'boolean' ? state.autoReveal : null;
+  }
+
+  async setAutoReveal(on) {
+    const leaf = this.fileExplorerLeaf();
+    if (!leaf || typeof leaf.getViewState !== 'function') return null;
+    const view = leaf.getViewState();
+    await leaf.setViewState({
+      type: view.type,
+      state: Object.assign({}, view.state, { autoReveal: !!on }),
+    });
+    const ws = this.app.workspace;
+    if (ws && typeof ws.requestSaveLayout === 'function') ws.requestSaveLayout();
+    return !!on;
+  }
+
+  /* The notice names the state it landed in rather than the act, because
+     "Toggled auto-reveal" leaves the user to guess which way it went. */
+  async toggleAutoReveal() {
+    const current = this.autoRevealState();
+    if (current === null) return null;
+    const next = await this.setAutoReveal(!current);
+    if (next === null) return null;
+    new Notice(`Auto-reveal current file is ${next ? 'ON' : 'OFF'}`);
+    return next;
   }
 
   /* ------------------------------------------------------------ folders -- */
@@ -905,6 +996,8 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       }
     }
 
+    this.renderAutoReveal(containerEl);
+
     /* Not a theme class, so it is this plugin's whichever plugin owns the
        five above. */
     new Setting(containerEl)
@@ -926,6 +1019,25 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
           this.plugin.settings.statusBarButtonOnHover = v;
           await this.plugin.saveSettings();
         }));
+  }
+
+  /* The mirror, not a second copy: it reads the live file-explorer leaf when
+     the tab opens and writes straight back to it. Nothing is stored here, so
+     this switch and Obsidian's own toolbar button can never disagree. */
+  renderAutoReveal(containerEl) {
+    const state = this.plugin.autoRevealState();
+    const setting = new Setting(containerEl).setName('Auto-reveal current file');
+
+    if (state === null) {
+      setting.setDesc('Obsidian highlights the note you are reading in the folder tree. The core File explorer is off, or this Obsidian is older than 1.8.3, so there is nothing to switch.');
+      return;
+    }
+
+    setting
+      .setDesc('Obsidian highlights the note you are reading in the folder tree. Command: "Toggle auto-reveal current file in the file explorer".')
+      .addToggle((t) => t
+        .setValue(state)
+        .onChange(async (v) => { await this.plugin.setAutoReveal(v); }));
   }
 
   renderSwitch(containerEl, s) {

@@ -86,6 +86,9 @@ class FakeEl {
     return node;
   }
   remove() { if (this.parentElement) this.parentElement.removeChild(this); }
+  /* Obsidian's own Element extension. A settings tab calls it on every
+     display(), so a tab gate cannot run without it. */
+  empty() { for (const c of [...this.children]) this.removeChild(c); return this; }
   addEventListener(type, fn) { (this.handlers[type] || (this.handlers[type] = [])).push(fn); }
   /* Returns the event, so a gate can ask whether the handler claimed the
      click. A handler that leaves the default alone on an <a href> lets the

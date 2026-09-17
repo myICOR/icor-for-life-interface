@@ -29,7 +29,10 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
 
 /* A vault: root folders as a tiny TFolder tree, and the explorer rows the host
    renders for them. `icor` decides whether the two ICOR marker rooms exist. */
-function loadPlugin({ saved = null, icor = true, styleSettings = false, folders = null } = {}) {
+function loadPlugin({
+  saved = null, icor = true, styleSettings = false, folders = null,
+  explorerLeaf = undefined,
+} = {}) {
   const body = new FakeEl('body');
   /* The host's status bar, with one core item in it, exists before any
      plugin loads. */
@@ -63,12 +66,17 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
   }
 
   const savedData = { value: saved };
+  const notices = [];
+  const settingTabs = [];
+  /* Every Setting the tab builds, with its toggle's live value and its
+     onChange, so a gate can read what the tab SHOWED and drive what it does. */
+  const settings = [];
   const obsidian = {
     Plugin: class {
       constructor(app, manifest) { this.app = app; this.manifest = manifest; }
       async loadData() { return savedData.value; }
       async saveData(d) { savedData.value = JSON.parse(JSON.stringify(d)); }
-      addSettingTab() {}
+      addSettingTab(tab) { settingTabs.push(tab); }
       registerEvent() {}
       registerMarkdownPostProcessor() {}
       registerDomEvent() {}
@@ -77,11 +85,29 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
       addStatusBarItem() { return statusBar.createDiv({ cls: 'status-bar-item plugin-icor-for-life-interface' }); }
     },
     PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },
-    Setting: class { constructor() {} setName() { return this; } setDesc() { return this; } setHeading() { return this; } addToggle() { return this; } addButton() { return this; } addText() { return this; } addDropdown() { return this; } addExtraButton() { return this; } addColorPicker() { return this; } },
+    Setting: class {
+      constructor() { this.name = ''; this.desc = ''; this.heading = false; this.toggle = null; settings.push(this); }
+      setName(n) { this.name = String(n); return this; }
+      setDesc(d) { this.desc = String(d); return this; }
+      setHeading() { this.heading = true; return this; }
+      addToggle(fn) {
+        const t = {
+          value: undefined, cb: null,
+          setValue(v) { t.value = v; return t; },
+          onChange(cb) { t.cb = cb; return t; },
+          setDisabled() { return t; },
+        };
+        this.toggle = t;
+        fn(t);
+        return this;
+      }
+      addButton() { return this; } addText() { return this; } addDropdown() { return this; }
+      addExtraButton() { return this; } addColorPicker() { return this; }
+    },
     FuzzySuggestModal: class { constructor() {} setPlaceholder() {} },
     AbstractInputSuggest: class { constructor() {} },
     Modal: class { constructor(app) { this.app = app; } open() {} },
-    Notice: class {},
+    Notice: class { constructor(msg) { notices.push(String(msg)); } },
     Platform: { isMobile: false, isDesktop: true },
     TFolder,
     setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
@@ -110,16 +136,59 @@ function loadPlugin({ saved = null, icor = true, styleSettings = false, folders 
   vm.createContext(sandbox);
   vm.runInContext(source, sandbox, { filename: 'main.js' });
 
+  /* A file-explorer leaf as the host hands one over: getViewState returns the
+     saved shape out of workspace.json, setViewState is recorded verbatim so a
+     gate can assert what was sent rather than only what came back. Passing
+     `explorerLeaf: null` is a vault whose core File explorer is turned off. */
+  const leafCalls = [];
+  const saveLayoutCalls = { n: 0 };
+  const makeLeaf = (autoReveal, { legacy = false } = {}) => ({
+    getViewState: () => {
+      const state = { sortOrder: 'alphabetical', showSearch: false, searchQuery: '' };
+      /* Obsidian 1.5.0 to 1.8.2: the file explorer predates the setting and
+         emits no key at all. `legacy` is that host, not a host with the
+         setting turned off. */
+      if (!legacy) state.autoReveal = autoReveal;
+      return { type: 'file-explorer', state, icon: 'lucide-folder-closed', title: 'Files' };
+    },
+    setViewState: async (vs) => {
+      leafCalls.push(JSON.parse(JSON.stringify(vs)));
+      /* the pre-1.8.3 host ignores a key it does not know */
+      if (!legacy && vs && vs.state) autoReveal = vs.state.autoReveal;
+    },
+  });
+  const leaf = explorerLeaf === undefined ? makeLeaf(false)
+    : (explorerLeaf === null ? null
+      : (explorerLeaf === 'legacy' ? makeLeaf(false, { legacy: true }) : makeLeaf(!!explorerLeaf)));
+
   const layoutReady = [];
   const app = {
     vault: { getRoot: () => root },
-    workspace: { onLayoutReady: (fn) => layoutReady.push(fn), on: () => ({}), getLeavesOfType: () => [] },
+    workspace: {
+      onLayoutReady: (fn) => layoutReady.push(fn),
+      on: () => ({}),
+      getLeavesOfType: (t) => ((t === 'file-explorer' && leaf) ? [leaf] : []),
+      requestSaveLayout: () => { saveLayoutCalls.n += 1; },
+    },
     metadataCache: { on: () => ({}), getFileCache: () => null },
     plugins: { enabledPlugins: new Set(styleSettings ? ['obsidian-style-settings'] : []) },
   };
   const PluginClass = sandbox.module.exports;
   const plugin = new PluginClass(app, { id: 'icor-for-life-interface', version: '0.0.0-gate' });
-  return { plugin, body, explorer, tree, statusBar, commands, buildRows, savedData, ready: () => layoutReady.forEach((f) => f()) };
+  /* Render the settings tab the plugin registered, into a container the tab
+     can empty, and hand back every Setting it built. */
+  const openSettings = () => {
+    settings.length = 0;
+    const tab = settingTabs[0];
+    tab.containerEl = new FakeEl('div');
+    tab.display();
+    return settings;
+  };
+  return {
+    plugin, body, explorer, tree, statusBar, commands, buildRows, savedData,
+    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings,
+    ready: () => layoutReady.forEach((f) => f()),
+  };
 }
 
 /* By attribute value rather than by selector: the fake engine splits selectors
@@ -545,4 +614,164 @@ test('unload restores the bar fully and removes the round button', async () => {
   assert.equal(zoneOf(body), null, 'the hit zone outlived the plugin');
   assert.equal(fabOf(body), null, 'the round button outlived the plugin');
   assert.ok(statusBar.children.some((c) => c.classSet.has('plugin-word-count')), 'a core item went missing on unload');
+});
+
+/* --------------------------------------------------------- auto-reveal --
+ *
+ * "Auto-reveal current file" is Obsidian's own switch and the host gives it
+ * exactly one surface: a button on the file-explorer toolbar. It registers no
+ * command for it (measured against the 1.13.7 bundle: eight `file-explorer:`
+ * command ids, none of them touches autoReveal), so a suite that reduces that
+ * toolbar has to carry the switch itself or the setting is gone.
+ *
+ * These gates measure the leaf, not the source: what was SENT to
+ * `setViewState`, what came back from `getViewState`, and what the notice
+ * said. A grep for `autoReveal` would stay green on a plugin that reads the
+ * state and never writes it.
+ */
+
+const autoRevealCommand = (commands) =>
+  commands.find((c) => c.id === 'toggle-auto-reveal') || null;
+
+test('the command exists and is named for what it does', async () => {
+  const { plugin, commands, ready } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  const cmd = autoRevealCommand(commands);
+  assert.ok(cmd, 'no toggle-auto-reveal command was registered');
+  assert.equal(cmd.name, 'Toggle auto-reveal current file in the file explorer',
+    'the command name has to say which control it flips; the palette is the only place a user meets it');
+});
+
+test('the command withdraws when there is no file explorer to flip', async () => {
+  const { plugin, commands, ready } = loadPlugin({ icor: true, explorerLeaf: null });
+  await plugin.onload(); ready();
+  const cmd = autoRevealCommand(commands);
+  assert.equal(cmd.checkCallback(true), false,
+    'the command offered itself with the core File explorer off, so its hotkey would do nothing');
+  assert.equal(plugin.autoRevealState(), null,
+    'the state must be null rather than false when there is no leaf; false is an answer the plugin invented');
+});
+
+test('the command flips the leaf, both ways, through setViewState', async () => {
+  const { plugin, commands, leafCalls, ready } = loadPlugin({ icor: true, explorerLeaf: false });
+  await plugin.onload(); ready();
+  assert.equal(plugin.autoRevealState(), false, 'the starting state was not read off the leaf');
+
+  await plugin.toggleAutoReveal();
+  assert.equal(leafCalls.length, 1, 'the first toggle wrote nothing to the leaf');
+  assert.equal(leafCalls[0].state.autoReveal, true, 'OFF did not become ON');
+  assert.equal(plugin.autoRevealState(), true, 'the leaf did not take the new state');
+
+  await plugin.toggleAutoReveal();
+  assert.equal(leafCalls[1].state.autoReveal, false, 'ON did not become OFF');
+});
+
+test('the write keeps the view type and the rest of the state, and never steals focus', async () => {
+  const { plugin, leafCalls, ready } = loadPlugin({ icor: true, explorerLeaf: false });
+  await plugin.onload(); ready();
+  await plugin.toggleAutoReveal();
+  const sent = leafCalls[0];
+  assert.equal(sent.type, 'file-explorer',
+    'the view type changed, which makes the host rebuild the view and drop the tree\'s scroll and open folders');
+  assert.equal(sent.state.sortOrder, 'alphabetical', 'the sort order was dropped from the state');
+  assert.equal(sent.state.searchQuery, '', 'the rest of the view state was not carried over');
+  assert.ok(!('active' in sent),
+    'the write carries `active`, which pulls focus into the sidebar; this command is used from the note being written');
+});
+
+test('the flip is handed to the host to persist', async () => {
+  const { plugin, saveLayoutCalls, ready } = loadPlugin({ icor: true, explorerLeaf: false });
+  await plugin.onload(); ready();
+  await plugin.toggleAutoReveal();
+  assert.equal(saveLayoutCalls.n, 1,
+    'requestSaveLayout was not called, so the flip is lost on the next start: a same-type setViewState '
+    + 'does not trigger a layout save on its own');
+});
+
+test('the notice names the state it landed in, not the act', async () => {
+  const { plugin, notices, ready } = loadPlugin({ icor: true, explorerLeaf: false });
+  await plugin.onload(); ready();
+  await plugin.toggleAutoReveal();
+  assert.equal(notices.length, 1, 'the toggle showed no notice');
+  assert.match(notices[0], /\bON\b/, 'the notice does not say the state is now ON');
+  await plugin.toggleAutoReveal();
+  assert.match(notices[1], /\bOFF\b/, 'the notice does not say the state is now OFF');
+  for (const n of notices) {
+    assert.ok(!/[–—]/.test(n), `the notice carries an em or en dash: ${n}`);
+  }
+});
+
+test('the state is never copied into data.json', async () => {
+  const { plugin, savedData, ready } = loadPlugin({ icor: false, explorerLeaf: false });
+  await plugin.onload(); ready();
+  await plugin.toggleAutoReveal();
+  const written = JSON.stringify(savedData.value || {});
+  assert.ok(!written.includes('autoReveal'),
+    'the plugin kept its own copy of a setting Obsidian already owns; two writers on one setting is the '
+    + 'fight applyChrome steps out of when Style Settings is installed');
+});
+
+test('the settings toggle mirrors the live leaf and writes back to it', async () => {
+  const { plugin, openSettings, leafCalls, ready } = loadPlugin({ icor: true, explorerLeaf: true });
+  await plugin.onload(); ready();
+
+  const shown = openSettings().find((s) => s.name === 'Auto-reveal current file');
+  assert.ok(shown, 'the settings tab has no auto-reveal row');
+  assert.equal(shown.toggle.value, true,
+    'the toggle did not read the live leaf, so it can show OFF while the file explorer is ON');
+
+  await shown.toggle.cb(false);
+  assert.equal(leafCalls.length, 1, 'the settings toggle wrote nothing to the leaf');
+  assert.equal(leafCalls[0].state.autoReveal, false, 'the settings toggle did not turn it off');
+  assert.equal(plugin.autoRevealState(), false, 'the leaf did not take the settings toggle\'s value');
+});
+
+test('with the file explorer off the settings row explains rather than offering a dead switch', async () => {
+  const { plugin, openSettings, ready } = loadPlugin({ icor: true, explorerLeaf: null });
+  await plugin.onload(); ready();
+  const shown = openSettings().find((s) => s.name === 'Auto-reveal current file');
+  assert.ok(shown, 'the auto-reveal row disappeared entirely; the user is left with no explanation');
+  assert.equal(shown.toggle, null, 'a toggle was offered with no leaf behind it');
+  assert.match(shown.desc, /File explorer is off/,
+    'the row does not say why there is nothing to switch');
+});
+
+/* THE CAPABILITY PROBE (Flint I-1, review of 0.7.0, 2026-09-17).
+ *
+ * The manifest floors at Obsidian 1.5.0 and the setting arrived in 1.8.3, so
+ * this plugin will load on hosts whose file explorer has never heard of
+ * `autoReveal`. Those hosts emit no key and ignore one on write. Reading the
+ * absence as `false` is the dead switch this release says it refuses to ship:
+ * the command would offer itself, the write would go nowhere, and the notice
+ * would report ON. The key's PRESENCE is the probe, so the gate feeds a leaf
+ * whose state simply does not carry it.
+ */
+test('a host older than the setting is told apart from the setting being off', async () => {
+  const { plugin, commands, leafCalls, openSettings, ready } = loadPlugin({ icor: true, explorerLeaf: 'legacy' });
+  await plugin.onload(); ready();
+
+  assert.equal(plugin.autoRevealState(), null,
+    'a file explorer that emits no autoReveal key was read as OFF; that is a host without the setting, '
+    + 'not a setting turned off, and false here is an answer the plugin invented');
+
+  const cmd = autoRevealCommand(commands);
+  assert.equal(cmd.checkCallback(true), false,
+    'the command offered itself on an Obsidian older than 1.8.3, where its write goes nowhere');
+
+  assert.equal(await plugin.toggleAutoReveal(), null, 'the toggle claimed to have done something');
+  assert.equal(leafCalls.length, 0, 'the plugin wrote a key the host does not know');
+
+  const shown = openSettings().find((s) => s.name === 'Auto-reveal current file');
+  assert.equal(shown.toggle, null, 'a live toggle was offered on a host without the setting');
+  assert.match(shown.desc, /older than 1\.8\.3/,
+    'the row does not tell the member their Obsidian is too old, so the missing switch reads as a bug');
+});
+
+/* CARDINALITY. Without this the block above goes green on a harness that
+   stopped handing the plugin a leaf at all. */
+test('the auto-reveal gates are measuring a real leaf', async () => {
+  const { plugin, ready } = loadPlugin({ icor: true, explorerLeaf: true });
+  await plugin.onload(); ready();
+  assert.equal(plugin.autoRevealState(), true,
+    'the fixture leaf reports nothing, so every assertion above is about a plugin talking to no one');
 });
