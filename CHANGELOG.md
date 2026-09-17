@@ -7,6 +7,36 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## [0.7.0] - 2026-09-17
+
+### Added
+- **A switch and a command for "Auto-reveal current file".** This is
+  Obsidian's own setting: with it on, opening a note highlights that note in
+  the folder tree, so you always see where you are. Obsidian offers it in one
+  place only, a small button on the toolbar above the file tree, and it
+  registers no command for it, so there was no hotkey and no palette entry to
+  fall back on when that toolbar gets busy. Two new ways in:
+  - The command **"Toggle auto-reveal current file in the file explorer"**,
+    in the command palette and bindable to a hotkey. It says which way it
+    went: "Auto-reveal current file is ON" or "... is OFF". With the core
+    File explorer turned off the command is not offered, because a hotkey
+    that does nothing is worse than one that is not there.
+  - A toggle in this plugin's settings, under "Obsidian's interface".
+  - Both read and write Obsidian's own switch, so they, the toolbar button
+    and the setting can never disagree. Nothing is stored in this plugin's
+    own settings file; the state stays where Obsidian keeps it and survives a
+    restart the way it always did.
+  - **Needs Obsidian 1.8.3 or newer**, which is where the setting itself
+    arrived. On an older Obsidian the settings row says so and the command is
+    not offered, rather than showing a switch that does nothing. The rest of
+    the plugin still works on 1.5.0 and up, unchanged.
+- Ten gates for the above (the command's name, its withdrawal with no file
+  explorer, the flip both ways, the view type and the rest of the view state
+  surviving the write, focus never moving to the sidebar, the layout save,
+  the notice wording, no copy in `data.json`, and the settings row in both
+  its states, plus an Obsidian too old to have the setting), seen red first
+  against 0.6.5.
+
 ## [0.6.5] - 2026-09-07
 
 ### Changed
