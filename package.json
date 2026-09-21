@@ -1,9 +1,9 @@
 {
   "name": "icor-for-life-interface",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },
-  "license": "LicenseRef-ICOR-Source-Available-1.0"
+  "license": "MIT"
 }

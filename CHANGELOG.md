@@ -7,6 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## [0.8.0] - 2026-09-21
+
+### Changed
+- Relicensed under MIT. Releases before 0.8.0 remain under the ICOR for Life
+  Source-Available License (Code) v1.0.
+
 ## [0.7.0] - 2026-09-17
 
 ### Added
