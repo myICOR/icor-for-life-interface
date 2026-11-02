@@ -3,15 +3,13 @@
  * The vault's chrome, in one place: which parts of Obsidian's own interface
  * are shown, and which folders carry a colour, an icon and a label.
  *
- * The INKLINE theme owns most chrome rules. This plugin owns two kinds of
- * DATA the theme reads:
+ * The INKLINE theme owns the look of the chrome. This plugin owns two kinds
+ * of DATA the theme reads:
  *
  *   1. Five classes on <body>, one per switch. INKLINE guards the ribbon, the
  *      reduced chrome, the banner, the room icons and the handwritten layer
  *      on exactly these names, so the switches here are the same switches
  *      Style Settings would show - in plain words, with no second plugin.
- *      For robustness, the ribbon hiding also uses Obsidian's native API
- *      when available (1.8.0+) and includes a fallback CSS rule.
  *
  *   2. Per-folder properties on file-explorer rows. INKLINE's room mechanism
  *      draws whatever `--room-color`, `--room-color-paper`, `--room-icon` and
@@ -33,8 +31,11 @@
  *
  * Four things carry their own small stylesheet because they must work on
  * any theme: the Outline depth rules, the diagram viewer, the collapsible
- * status bar, and a fallback rule for ribbon hiding (when the theme's rule
- * or Obsidian's native API doesn't apply).
+ * status bar (one body class, one item in the bar, one round button at the
+ * bottom right of the main window, where the bar itself lives), and the left
+ * ribbon. The ribbon's is a fallback and nothing more: the two rules INKLINE
+ * already has, under the same `icor-hide-ribbon` class, so the switch still
+ * does what it says on another theme. No other switch has CSS here.
  *
  * Hand-written CommonJS, no build step, like the rest of the suite.
  */
@@ -217,6 +218,7 @@ const STATUS_ITEM_LABEL = 'Fold status bar to the right';
  * a vault it was just installed into has broken that vault. */
 const ICOR_MARKERS = [/^00 /, /^06 /];
 
+const INKLINE_THEME = 'ICOR for Life - INKLINE';
 const STYLE_SETTINGS_ID = 'obsidian-style-settings';
 const MANAGED = 'data-icor-managed';
 const KIND = 'data-icor-kind';
@@ -357,47 +359,35 @@ class IcorInterfacePlugin extends Plugin {
     return !!(plugins && plugins.enabledPlugins && plugins.enabledPlugins.has(STYLE_SETTINGS_ID));
   }
 
-  /* Check if the native ribbon API exists (Obsidian 1.8.0+). Returns the
-     left ribbon element if present, or null. */
-  getLeftRibbon() {
-    const ws = this.app.workspace;
-    if (!ws || typeof ws.leftRibbon !== 'object') return null;
-    return ws.leftRibbon || null;
+  /* The active theme's name, '' for Obsidian's default, null when this build
+     does not say. Neither read is in obsidian.d.ts, so both are checked. */
+  activeThemeName() {
+    const { vault, customCss } = this.app;
+    const config = vault && typeof vault.getConfig === 'function' ? vault.getConfig('cssTheme') : undefined;
+    if (typeof config === 'string') return config;
+    return customCss && typeof customCss.theme === 'string' ? customCss.theme : null;
   }
 
-  /* Set ribbon visibility using the native API if available, otherwise
-     fall back to CSS class. Returns true if native API was used. */
-  setRibbonVisibility(visible) {
-    const ribbon = this.getLeftRibbon();
-    if (ribbon && typeof ribbon.toggle === 'function') {
-      ribbon.toggle(visible);
-      return true;
-    }
-    return false;
+  /* Said in the switch's own description, never in a notice. Empty unless
+     the ribbon is hidden and the theme is known not to be INKLINE. */
+  ribbonThemeHint() {
+    if (this.settings.showRibbon) return '';
+    const theme = this.activeThemeName();
+    if (theme === null || theme === INKLINE_THEME) return '';
+    return "INKLINE is not the active theme, so this plugin's own fallback rule is hiding the ribbon. The rest of the ICOR for Life look needs INKLINE, under Settings, Appearance.";
   }
 
   /* Style Settings owns the same five classes when it is installed. Two
      things writing one class on their own schedules is a fight the user
      watches and cannot referee, so this plugin steps aside entirely and the
-     settings tab says so. For ribbon hiding, we also try Obsidian's native
-     API (1.8.0+) before falling back to the body class. */
+     settings tab says so. */
   applyChrome() {
     this.applyOutline(this.settings.outlineDepth);
     this.applyStatusBar();
     if (this.styleSettingsActive()) return;
     for (const s of SWITCHES) {
       const on = !!this.settings[s.key];
-      /* For ribbon, try native API first */
-      if (s.key === 'showRibbon') {
-        const usedNativeApi = this.setRibbonVisibility(on);
-        /* Still set the class for theme compatibility, unless native API
-           handled it (which means the theme shouldn't be fighting it) */
-        if (!usedNativeApi) {
-          document.body.classList.toggle(s.cls, s.on === 'present' ? on : !on);
-        }
-      } else {
-        document.body.classList.toggle(s.cls, s.on === 'present' ? on : !on);
-      }
+      document.body.classList.toggle(s.cls, s.on === 'present' ? on : !on);
     }
   }
 
@@ -1072,29 +1062,22 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         .onChange(async (v) => { await this.plugin.setAutoReveal(v); }));
   }
 
+  switchDesc(s) {
+    const hint = s.key === 'showRibbon' ? this.plugin.ribbonThemeHint() : '';
+    return hint ? `${s.desc} ${hint}` : s.desc;
+  }
+
   renderSwitch(containerEl, s) {
     const setting = new Setting(containerEl)
       .setName(s.name)
-      .setDesc(s.desc)
+      .setDesc(this.switchDesc(s))
       .addToggle((t) => t
         .setValue(!!this.plugin.settings[s.key])
         .onChange(async (v) => {
           this.plugin.settings[s.key] = v;
           await this.plugin.saveSettings();
+          setting.setDesc(this.switchDesc(s));
         }));
-    
-    /* For the ribbon switch, add a diagnostic note if it's set to hide
-       but we detect potential issues */
-    if (s.key === 'showRibbon' && !this.plugin.settings[s.key]) {
-      const hasNativeApi = !!this.plugin.getLeftRibbon();
-      const hasThemeClass = document.body.classList.contains('icor-hide-ribbon');
-      
-      if (!hasNativeApi && !hasThemeClass) {
-        setting.setDesc(s.desc + '\n\nNote: The ribbon should be hidden but the class may not be applied yet. If the ribbon is still visible after reloading Obsidian, check that the INKLINE theme is active and up to date.');
-      } else if (hasNativeApi) {
-        setting.setDesc(s.desc + '\n\n✓ Using Obsidian\'s native ribbon API.');
-      }
-    }
   }
 
   renderFolders(containerEl) {

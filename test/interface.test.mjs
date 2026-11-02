@@ -31,7 +31,7 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
    renders for them. `icor` decides whether the two ICOR marker rooms exist. */
 function loadPlugin({
   saved = null, icor = true, styleSettings = false, folders = null,
-  explorerLeaf = undefined,
+  explorerLeaf = undefined, leftRibbon = undefined, theme = undefined, customTheme = undefined,
 } = {}) {
   const body = new FakeEl('body');
   /* The host's status bar, with one core item in it, exists before any
@@ -163,8 +163,10 @@ function loadPlugin({
 
   const layoutReady = [];
   const app = {
-    vault: { getRoot: () => root },
+    vault: { getRoot: () => root, ...(theme === undefined ? {} : { getConfig: (k) => (k === 'cssTheme' ? theme : undefined) }) },
+    ...(customTheme === undefined ? {} : { customCss: { theme: customTheme } }),
     workspace: {
+      leftRibbon,
       onLayoutReady: (fn) => layoutReady.push(fn),
       on: () => ({}),
       getLeavesOfType: (t) => ((t === 'file-explorer' && leaf) ? [leaf] : []),
@@ -416,6 +418,83 @@ test('settings saved by 0.5.x with the old negative keys migrate by inversion', 
   assert.ok(body.classSet.has('icor-hide-ribbon'), 'the migrated ribbon choice was not applied');
   assert.ok(body.classSet.has('inkline-no-hand'), 'the migrated handwriting choice was not applied');
   assert.ok(!body.classSet.has('icor-scaffold-chrome'));
+});
+
+/* ------------------------------------------------------- ribbon hiding -- */
+
+const INKLINE = 'ICOR for Life - INKLINE';
+const ribbonRow = (open) => open().find((s) => s.name === 'Left ribbon');
+
+test('the ribbon class is set even on a host whose ribbon has a toggle, and the toggle is never called', async () => {
+  const calls = [];
+  const { plugin, body, ready } = loadPlugin({ icor: true, leftRibbon: { toggle: (v) => calls.push(v) } });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has('icor-hide-ribbon'), 'the class is what the theme and the fallback rule read');
+  plugin.settings.showRibbon = true;
+  await plugin.saveSettings();
+  assert.ok(!body.classSet.has('icor-hide-ribbon'));
+  assert.deepEqual(calls, [], 'workspace.leftRibbon.toggle is not in obsidian.d.ts');
+});
+
+test('turning the switch back on and unloading both bring the ribbon back', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  assert.ok(body.classSet.has('icor-hide-ribbon'));
+  plugin.settings.showRibbon = true;
+  await plugin.saveSettings();
+  assert.ok(!body.classSet.has('icor-hide-ribbon'), 'the switch did not bring the ribbon back');
+  plugin.settings.showRibbon = false;
+  await plugin.saveSettings();
+  assert.ok(body.classSet.has('icor-hide-ribbon'));
+  plugin.onunload();
+  assert.ok(!body.classSet.has('icor-hide-ribbon'), 'unload left the ribbon hidden');
+});
+
+test('the fallback rule hides the ribbon only under the class, the way INKLINE does, and can be undone', () => {
+  const css = readFileSync(resolve(repo, 'styles.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, sel]) => /ribbon/.test(sel));
+  assert.equal(rules.length, 2, 'the hide rule and the macOS inset');
+  for (const [, sel, body] of rules) {
+    for (const part of sel.split(',')) assert.match(part.trim(), /^body(\.[\w-]+|:not\([^)]*\))*\.icor-hide-ribbon\b/, `unscoped: ${part.trim()}`);
+    assert.ok(!body.includes('!important'), 'a rule that outranks the switch is the 1.4.0 snippet bug again');
+  }
+  assert.ok(rules.some(([, sel, body]) => sel.trim() === 'body.icor-hide-ribbon .workspace-ribbon.mod-left' && /display:\s*none/.test(body)));
+});
+
+test('the ribbon hint shows when the ribbon is hidden on another theme, and only then', async () => {
+  for (const [opts, shown] of [
+    [{ theme: 'Minimal' }, true],
+    [{ theme: '' }, true],
+    [{ customTheme: 'Minimal' }, true],
+    [{ theme: INKLINE }, false],
+    [{ customTheme: INKLINE }, false],
+    [{}, false],
+    [{ theme: 42 }, false],
+  ]) {
+    const { plugin, openSettings, ready } = loadPlugin({ icor: true, ...opts });
+    await plugin.onload(); ready();
+    const { desc } = ribbonRow(openSettings);
+    assert.equal(desc.includes('INKLINE is not the active theme'), shown, JSON.stringify(opts));
+    assert.ok(!/may not be applied|native/i.test(desc), 'the old guesswork text');
+  }
+});
+
+test('the ribbon hint follows the switch and raises no notice', async () => {
+  const { plugin, openSettings, notices, ready } = loadPlugin({ icor: true, theme: 'Minimal' });
+  await plugin.onload(); ready();
+  const row = ribbonRow(openSettings);
+  assert.match(row.desc, /INKLINE is not the active theme/);
+  await row.toggle.cb(true);
+  assert.ok(!row.desc.includes('INKLINE is not the active theme'), 'a visible ribbon needs no hint');
+  await row.toggle.cb(false);
+  assert.match(row.desc, /INKLINE is not the active theme/);
+  assert.deepEqual(notices, []);
+});
+
+test('with Style Settings on, this plugin still leaves the ribbon class alone', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true, styleSettings: true, theme: 'Minimal' });
+  await plugin.onload(); ready();
+  assert.ok(!body.classSet.has('icor-hide-ribbon'));
 });
 
 /* -------------------------------------------------------------- outline -- */
