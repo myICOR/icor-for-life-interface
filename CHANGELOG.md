@@ -7,6 +7,29 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## [0.8.1] - 2026-11-02
+
+### Fixed
+- **Ribbon hiding is now robust across themes and Obsidian versions.** On
+  first run in an ICOR vault, the plugin sets `showRibbon: false` and adds
+  the `icor-hide-ribbon` class to body, but in some configurations (INKLINE
+  theme not active, theme outdated, Style Settings interference, or load
+  order issues) the left ribbon could remain visible. Three changes make
+  hiding reliable:
+  - The plugin now uses **Obsidian's native ribbon API** (1.8.0+) when
+    available, calling `workspace.leftRibbon.toggle(false)` directly. This
+    takes precedence over theme CSS.
+  - A **fallback CSS rule** in `styles.css` ensures the ribbon hides even
+    when the theme doesn't provide the rule or the native API isn't
+    available. The rule targets both `.workspace-ribbon.mod-left` and
+    `.side-dock-ribbon.mod-left` (older Obsidian versions) with high
+    specificity and `!important` to win over conflicting styles.
+  - The settings tab now shows **diagnostic feedback**: when the ribbon
+    should be hidden, it confirms whether the native API is in use or warns
+    if configuration issues are detected.
+  - Together these changes provide defense-in-depth: native API first, CSS
+    fallback second, and clear user feedback if neither works.
+
 ## [0.8.0] - 2026-09-21
 
 ### Changed
