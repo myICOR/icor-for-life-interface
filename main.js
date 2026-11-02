@@ -3,8 +3,8 @@
  * The vault's chrome, in one place: which parts of Obsidian's own interface
  * are shown, and which folders carry a colour, an icon and a label.
  *
- * It writes NO CSS OF ITS OWN. The INKLINE theme owns every rule. This plugin
- * owns two kinds of DATA the theme reads:
+ * The INKLINE theme owns the look of the chrome. This plugin owns two kinds
+ * of DATA the theme reads:
  *
  *   1. Five classes on <body>, one per switch. INKLINE guards the ribbon, the
  *      reduced chrome, the banner, the room icons and the handwritten layer
@@ -29,10 +29,13 @@
  * plugin serialises it into the `url("data:image/svg+xml,...")` the theme
  * masks with. No icon set is bundled.
  *
- * Three things carry their own small stylesheet because they must work on
- * any theme: the Outline depth rules, the diagram viewer, and the
- * collapsible status bar (one body class, one item in the bar, one round
- * button at the bottom right of the main window, where the bar itself lives).
+ * Four things carry their own small stylesheet because they must work on
+ * any theme: the Outline depth rules, the diagram viewer, the collapsible
+ * status bar (one body class, one item in the bar, one round button at the
+ * bottom right of the main window, where the bar itself lives), and the left
+ * ribbon. The ribbon's is a fallback and nothing more: the two rules INKLINE
+ * already has, under the same `icor-hide-ribbon` class, so the switch still
+ * does what it says on another theme. No other switch has CSS here.
  *
  * Hand-written CommonJS, no build step, like the rest of the suite.
  */
@@ -215,6 +218,7 @@ const STATUS_ITEM_LABEL = 'Fold status bar to the right';
  * a vault it was just installed into has broken that vault. */
 const ICOR_MARKERS = [/^00 /, /^06 /];
 
+const INKLINE_THEME = 'ICOR for Life - INKLINE';
 const STYLE_SETTINGS_ID = 'obsidian-style-settings';
 const MANAGED = 'data-icor-managed';
 const KIND = 'data-icor-kind';
@@ -353,6 +357,24 @@ class IcorInterfacePlugin extends Plugin {
   styleSettingsActive() {
     const plugins = this.app.plugins;
     return !!(plugins && plugins.enabledPlugins && plugins.enabledPlugins.has(STYLE_SETTINGS_ID));
+  }
+
+  /* The active theme's name, '' for Obsidian's default, null when this build
+     does not say. Neither read is in obsidian.d.ts, so both are checked. */
+  activeThemeName() {
+    const { vault, customCss } = this.app;
+    const config = vault && typeof vault.getConfig === 'function' ? vault.getConfig('cssTheme') : undefined;
+    if (typeof config === 'string') return config;
+    return customCss && typeof customCss.theme === 'string' ? customCss.theme : null;
+  }
+
+  /* Said in the switch's own description, never in a notice. Empty unless
+     the ribbon is hidden and the theme is known not to be INKLINE. */
+  ribbonThemeHint() {
+    if (this.settings.showRibbon) return '';
+    const theme = this.activeThemeName();
+    if (theme === null || theme === INKLINE_THEME) return '';
+    return "INKLINE is not the active theme, so this plugin's own fallback rule is hiding the ribbon. The rest of the ICOR for Life look needs INKLINE, under Settings, Appearance.";
   }
 
   /* Style Settings owns the same five classes when it is installed. Two
@@ -1040,15 +1062,21 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         .onChange(async (v) => { await this.plugin.setAutoReveal(v); }));
   }
 
+  switchDesc(s) {
+    const hint = s.key === 'showRibbon' ? this.plugin.ribbonThemeHint() : '';
+    return hint ? `${s.desc} ${hint}` : s.desc;
+  }
+
   renderSwitch(containerEl, s) {
-    new Setting(containerEl)
+    const setting = new Setting(containerEl)
       .setName(s.name)
-      .setDesc(s.desc)
+      .setDesc(this.switchDesc(s))
       .addToggle((t) => t
         .setValue(!!this.plugin.settings[s.key])
         .onChange(async (v) => {
           this.plugin.settings[s.key] = v;
           await this.plugin.saveSettings();
+          setting.setDesc(this.switchDesc(s));
         }));
   }
 

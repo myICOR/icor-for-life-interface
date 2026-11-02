@@ -1,8 +1,23 @@
 /* ICOR for Life - Interface.
-   The chrome switches and the folder rows are drawn by the INKLINE theme and
-   have no CSS here. This file carries the three things that must work on
-   any theme: the Outline depth rules, the diagram viewer and the collapsible
-   status bar, plus the settings tab's own controls. */
+   The chrome switches and the folder rows are drawn by the INKLINE theme.
+   This file carries the four things that must work on any theme: a fallback
+   for the ribbon switch, the Outline depth rules, the diagram viewer and the
+   collapsible status bar, plus the settings tab's own controls. */
+
+/* ----------------------------------------------------------- ribbon hiding --
+   INKLINE's own two rules for the `icor-hide-ribbon` switch, repeated so the
+   switch still works when INKLINE is not the active theme. They do nothing
+   extra on INKLINE. No !important: guarded by the class this outranks the
+   host, and removing the class is all it takes to bring the ribbon back. */
+body.icor-hide-ribbon .workspace-ribbon.mod-left {
+  display: none;
+}
+
+/* Obsidian's tab header inset assumes the ribbon still takes up its column;
+   without this the sidebar toggle slides under the macOS window buttons. */
+body.mod-macos.is-frameless:not(.is-fullscreen).icor-hide-ribbon {
+  --frame-left-space: 80px;
+}
 
 .icor-if-icon-suggestion {
   display: flex;
