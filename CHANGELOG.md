@@ -7,7 +7,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
-## [0.8.1] - Unreleased
+## [0.8.1] - 2026-11-02
 
 ### Fixed
 - **The Left ribbon switch hides the ribbon on any theme.** The switch only
