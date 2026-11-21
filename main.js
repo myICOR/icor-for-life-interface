@@ -291,6 +291,16 @@ class IcorInterfacePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('file-open', () => window.setTimeout(() => this.foldProperties(), 0)));
     this.registerEvent(this.app.workspace.on('layout-change', () => this.foldProperties()));
     this.registerEvent(this.app.metadataCache.on('changed', () => this.countProperties()));
+    /* A mouse click on the properties bar leaves Obsidian's toggle holding the focus, and the theme draws the focus
+       ring for it as if the keyboard had moved there: let go of it after a click (a key press keeps its ring). */
+    this.registerDomEvent(document, 'click', (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== 'function' || !e.detail || !t.closest('.metadata-container')) return;
+      window.setTimeout(() => {
+        const a = document.activeElement;
+        if (a && typeof a.closest === 'function' && a.closest('.metadata-properties-heading') && typeof a.blur === 'function') a.blur();
+      }, 0);
+    });
     this.registerDomEvent(document, 'click', (e) => {
       const t = e.target;
       if (!t || typeof t.closest !== 'function' || !document.body.classList.contains(PROPS_FOLD_CLASS)) return;
