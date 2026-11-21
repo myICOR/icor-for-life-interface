@@ -99,10 +99,10 @@ const PALETTE = [
   { key: 'yellow',     name: 'Yellow (Daily Scratchpad)', ink: '#c2a35c', paper: '#7f662f' },
   { key: 'terracotta', name: 'Terracotta (Inbox)',        ink: '#c2765a', paper: '#9e4526' },
   { key: 'marker',     name: 'Marker (Planner)',          ink: '#ff5a2d', paper: '#b3401f' },
-  { key: 'cyan',       name: 'Cyan (WiP)',                ink: '#7a99a1', paper: '#4e6b73' },
+  { key: 'cyan',       name: 'Cyan (Contacts, Projects)', ink: '#7a99a1', paper: '#4e6b73' },
   { key: 'success',    name: 'Green (Inner World)',       ink: '#7d9a7f', paper: '#5e7a60' },
   { key: 'burgundy',   name: 'Burgundy (Assets)',         ink: '#a87795', paper: '#7c5570' },
-  { key: 'indigo',     name: 'Indigo (AI Team)',          ink: '#8087a6', paper: '#565e7e' },
+  { key: 'indigo',     name: 'Indigo (Outer World)',      ink: '#8087a6', paper: '#565e7e' },
   { key: 'rose',       name: 'Rose (Databases)',          ink: '#b57a86', paper: '#8f5560' },
 ];
 
@@ -122,10 +122,9 @@ const SCAFFOLD = [
   { room: '00', kind: 'room', hue: 'yellow',     icon: 'pencil',         label: 'Daily Scratchpad' },
   { room: '01', kind: 'room', hue: 'terracotta', icon: 'inbox',          label: 'Inbox' },
   { room: '02', kind: 'room', hue: 'marker',     icon: 'calendar-range', label: 'Planner' },
-  { room: '03', kind: 'room', hue: 'cyan',       icon: 'hammer',         label: 'WiP' },
   { room: '04', kind: 'room', hue: 'success',    icon: 'sprout',         label: 'Inner World' },
   { room: '05', kind: 'room', hue: 'burgundy',   icon: 'package',        label: 'Assets' },
-  { room: '06', kind: 'room', hue: 'indigo',     icon: 'bot',            label: 'AI Team' },
+  { room: '06', kind: 'room', hue: 'indigo',     icon: 'globe',          label: 'Outer World' },
   { room: '07', kind: 'room', hue: 'rose',       icon: 'database',       label: 'Databases' },
   { room: '01', sub: 'Outer World',       kind: 'family', hue: 'terracotta', icon: 'globe' },
   { room: '01', sub: 'Scanner Inbox',     kind: 'family', hue: 'terracotta', icon: 'scan-line' },
@@ -140,17 +139,6 @@ const SCAFFOLD = [
   { room: '05', sub: 'Images',            kind: 'family', hue: 'burgundy',   icon: 'image' },
   { room: '05', sub: 'Audio',             kind: 'family', hue: 'burgundy',   icon: 'music' },
   { room: '05', sub: 'Documents',         kind: 'family', hue: 'burgundy',   icon: 'file-text' },
-  { room: '06', sub: 'AI Team Knowledge', kind: 'family', hue: 'indigo',     icon: 'book-open' },
-  { room: '06', sub: 'Agents',            kind: 'family', hue: 'indigo',     icon: 'users' },
-  { room: '06', sub: 'AI Sessions',       kind: 'family', hue: 'indigo',     icon: 'messages-square' },
-  { room: '06', sub: 'Workstreams',       kind: 'family', hue: 'indigo',     icon: 'workflow' },
-  { room: '06', sub: 'SOPs',              kind: 'family', hue: 'indigo',     icon: 'clipboard-list' },
-  { room: '06', sub: 'Guidelines',        kind: 'family', hue: 'indigo',     icon: 'book-marked' },
-  { room: '06', sub: 'Scripts',           kind: 'family', hue: 'indigo',     icon: 'code' },
-  { room: '06', sub: 'Tasks',             kind: 'family', hue: 'indigo',     icon: 'square-check-big' },
-  { room: '06', sub: 'Session Logs',      kind: 'family', hue: 'indigo',     icon: 'history' },
-  { room: '06', sub: 'Avatars',           kind: 'family', hue: 'indigo',     icon: 'circle-user' },
-  { room: '06', sub: 'Brand',             kind: 'family', hue: 'indigo',     icon: 'infinity' },
 ];
 
 const KINDS = [
@@ -179,7 +167,22 @@ const DEFAULT_SETTINGS = {
   /* folded, the round button is invisible until the pointer comes near it
      (or it has keyboard focus); off, it is always visible */
   statusBarButtonOnHover: true,
+  /* INKLINE's Look: 'gradient' (lit plates and glass) or 'flat' (ink and paper); the theme reads the class */
+  look: 'gradient',
+  /* _System (schema, templates, skills, tools) in the file tree; hidden by default, it is still there */
+  showSystem: false,
+  /* where a note's properties show: 'top' (Obsidian's way), 'collapsed' (on top, folded), 'bottom' (under the note),
+     'sidebar' (hidden in notes: Obsidian's own Properties in document: Hidden, and its File properties panel) */
+  properties: 'top',
 };
+
+/* Before 0.9.0 these three lived in ICOR for Life - Objects; its settings are read once, on the first load here. */
+const FROM_OBJECTS = ['look', 'showSystem', 'properties'];
+const PROPERTY_PLACES = ['top', 'collapsed', 'bottom', 'sidebar'];
+const LOOK_CLASSES = { gradient: 'inkline-gradient', flat: 'inkline-flat' };
+const HIDE_SYSTEM_CLASS = 'icor-hide-system';
+const PROPS_BOTTOM_CLASS = 'icor-props-bottom';
+const PROPS_FOLD_CLASS = 'icor-props-folding';
 
 const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
 
@@ -240,6 +243,8 @@ class IcorInterfacePlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, this.migrate(saved || {}));
     this.settings.folders = Array.isArray(this.settings.folders) ? this.settings.folders : [];
     if (saved === null || saved === undefined) this.applyFirstRunDefaults();
+    if (!saved || FROM_OBJECTS.some((k) => !(k in saved))) await this.importFromObjects(saved || {});
+    if (this.nativeProperties() === 'hidden' && this.settings.properties !== 'sidebar') this.settings.properties = 'sidebar';
 
     this.addSettingTab(new IcorInterfaceSettingTab(this.app, this));
 
@@ -268,8 +273,36 @@ class IcorInterfacePlugin extends Plugin {
       },
     });
 
+    this.addCommand({
+      id: 'toggle-look', name: 'Switch the look between flat and gradient',
+      callback: async () => { this.settings.look = this.settings.look === 'flat' ? 'gradient' : 'flat'; await this.saveSettings(); },
+    });
+    this.addCommand({
+      id: 'show-file-properties', name: "Show the note's properties in the right sidebar",
+      callback: () => { void this.showPropertiesPanel(true); },
+    });
+    this.addCommand({
+      id: 'toggle-system', name: 'Show or hide _System in the file tree',
+      callback: async () => { this.settings.showSystem = !this.settings.showSystem; await this.saveSettings(); },
+    });
+
+    /* Properties folded on top: each note opens with them folded, once (unfolding it stays unfolded while it is
+       open), and the whole bar folds and unfolds, not only its little arrow. */
+    this.registerEvent(this.app.workspace.on('file-open', () => window.setTimeout(() => this.foldProperties(), 0)));
+    this.registerEvent(this.app.workspace.on('layout-change', () => this.foldProperties()));
+    this.registerEvent(this.app.metadataCache.on('changed', () => this.countProperties()));
+    this.registerDomEvent(document, 'click', (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== 'function' || !document.body.classList.contains(PROPS_FOLD_CLASS)) return;
+      const box = t.closest('.metadata-container');
+      if (!box || !box.classList.contains('is-collapsed') || t.closest('.metadata-properties-heading')) return;
+      const head = box.querySelector('.metadata-properties-heading');
+      if (head) head.click();
+    });
+
     this.app.workspace.onLayoutReady(() => {
       this.applyChrome();
+      this.foldProperties();
       this.applyFolders();
       this.observeExplorer();
     });
@@ -305,6 +338,7 @@ class IcorInterfacePlugin extends Plugin {
        classes, and every row it claimed. Left behind, the theme would keep
        rendering a configuration nobody can edit any more. */
     for (const s of SWITCHES) document.body.classList.remove(s.cls);
+    document.body.classList.remove(...Object.values(LOOK_CLASSES), HIDE_SYSTEM_CLASS, PROPS_BOTTOM_CLASS, PROPS_FOLD_CLASS);
     this.applyOutline(0);
     this.teardownStatusBar();
     for (const row of document.querySelectorAll(`[${MANAGED}]`)) this.releaseRow(row);
@@ -341,8 +375,27 @@ class IcorInterfacePlugin extends Plugin {
     return ICOR_MARKERS.every((re) => names.some((n) => re.test(n)));
   }
 
+  /* The three settings Objects held before 0.9.0, taken once from its saved settings; what this plugin already has
+     wins. Objects stops writing them, so the two can never disagree after this. */
+  async importFromObjects(saved) {
+    const adapter = this.app.vault.adapter;
+    if (!adapter || typeof adapter.exists !== 'function') return;
+    try {
+      const path = `${this.app.vault.configDir}/plugins/icor-for-life-objects/data.json`;
+      if (!(await this.app.vault.adapter.exists(path))) return;
+      const o = JSON.parse(await this.app.vault.adapter.read(path)) || {};
+      let changed = false;
+      for (const k of FROM_OBJECTS) if (!(k in saved) && k in o) { this.settings[k] = o[k]; changed = true; }
+      if (!PROPERTY_PLACES.includes(this.settings.properties)) this.settings.properties = 'top';
+      if (changed) await this.saveData(this.settings);
+    } catch (e) { console.warn('ICOR for Life - Interface: the settings from Objects could not be read', e); }
+  }
+
   applyFirstRunDefaults() {
     if (!this.isIcorVault()) return;
+    /* ICOR for Life 3.0 (it has _System/schema.json) keeps Obsidian's ribbon and file controls: its README sends a
+       new member to the ribbon, and nothing reroutes the file controls any more. */
+    if (typeof this.app.vault.getAbstractFileByPath === 'function' && this.app.vault.getAbstractFileByPath('_System/schema.json')) { this.firstRunApplied = true; return; }
     this.settings.showRibbon = false;
     this.settings.showControls = false;
     this.firstRunApplied = true;
@@ -362,11 +415,91 @@ class IcorInterfacePlugin extends Plugin {
   applyChrome() {
     this.applyOutline(this.settings.outlineDepth);
     this.applyStatusBar();
+    this.applyNotes();
     if (this.styleSettingsActive()) return;
     for (const s of SWITCHES) {
       const on = !!this.settings[s.key];
       document.body.classList.toggle(s.cls, s.on === 'present' ? on : !on);
     }
+  }
+
+  /* The Look, _System and the properties: classes on <body>. The Look is the theme's (INKLINE reads the class; Style
+     Settings can set it too, whichever ran last wins); _System and the properties work on any theme (styles.css). */
+  applyNotes() {
+    const b = document.body.classList;
+    const look = this.settings.look === 'flat' ? 'flat' : 'gradient';
+    for (const [k, cls] of Object.entries(LOOK_CLASSES)) b.toggle(cls, k === look);
+    b.toggle(HIDE_SYSTEM_CLASS, !this.settings.showSystem);
+    b.toggle(PROPS_BOTTOM_CLASS, this.settings.properties === 'bottom');
+    b.toggle(PROPS_FOLD_CLASS, this.settings.properties === 'collapsed');
+    this.syncNativeProperties();
+    this.foldProperties();
+  }
+
+  /* "Hidden in notes" is Obsidian's own switch (Settings, Editor, Properties in document), so it is set there, not
+     imitated: Hidden while this plugin says sidebar, back to Visible when it says anything else (only if Obsidian is
+     on Hidden, so its Source mode is left alone). The note's properties then live in the File properties panel. */
+  nativeProperties() {
+    const v = this.app.vault.getConfig ? this.app.vault.getConfig('propertiesInDocument') : null;
+    return typeof v === 'string' ? v : 'visible';
+  }
+
+  syncNativeProperties() {
+    if (!this.app.vault.setConfig) return;
+    const native = this.nativeProperties();
+    if (this.settings.properties === 'sidebar') {
+      if (native !== 'hidden') this.app.vault.setConfig('propertiesInDocument', 'hidden');
+      this.app.workspace.onLayoutReady(() => { void this.showPropertiesPanel(false); });
+    } else if (native === 'hidden') {
+      this.app.vault.setConfig('propertiesInDocument', 'visible');
+    }
+  }
+
+  /* Obsidian's File properties panel (the open note's properties; "All properties" is the vault's list) in the right
+     sidebar: made if it is not there, brought forward when asked. */
+  async showPropertiesPanel(reveal) {
+    const ws = this.app.workspace;
+    let leaf = ws.getLeavesOfType('file-properties')[0];
+    if (!leaf) {
+      leaf = ws.getRightLeaf(false);
+      if (!leaf) return;
+      await leaf.setViewState({ type: 'file-properties', active: false });
+      reveal = true;
+    }
+    if (reveal) await ws.revealLeaf(leaf);
+  }
+
+  /* Folds the properties of every open note once per note, through Obsidian's own toggle so it keeps its state, and
+     hands the keyboard back to the note (the toggle takes focus, and the theme would draw a focus ring). */
+  foldProperties() {
+    if (this.settings.properties !== 'collapsed') return;
+    if (!this.folded) this.folded = new WeakMap();
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (!view || !view.file || view.getViewType() !== 'markdown') return;
+      const box = view.containerEl.querySelector('.metadata-container');
+      if (!box || this.folded.get(box) === view.file.path) return;
+      this.folded.set(box, view.file.path);
+      if (!box.classList.contains('is-collapsed')) {
+        const head = box.querySelector('.metadata-properties-heading');
+        if (head) head.click();
+        if (box.contains(document.activeElement) && view.editor) view.editor.focus();
+      }
+    });
+    this.countProperties();
+  }
+
+  /* How many properties a folded bar holds, shown at its right end. */
+  countProperties() {
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (!view || !view.file || view.getViewType() !== 'markdown') return;
+      const head = view.containerEl.querySelector('.metadata-properties-heading');
+      if (!head) return;
+      const fm = (this.app.metadataCache.getFileCache(view.file) || {}).frontmatter || {};
+      const n = Object.keys(fm).filter((k) => k !== 'position').length;
+      head.setAttribute('data-icor-count', n ? String(n) : '');
+    });
   }
 
   /* The core Outline has no API, but it is a tree of nested .tree-item
@@ -947,10 +1080,38 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    this.renderNotes(containerEl);
     this.renderChrome(containerEl);
     this.renderOutline(containerEl);
     this.renderDiagrams(containerEl);
     this.renderFolders(containerEl);
+  }
+
+  renderNotes(containerEl) {
+    const s = this.plugin.settings;
+    const save = async () => { await this.plugin.saveSettings(); };
+    new Setting(containerEl).setName('Look and notes').setHeading();
+    new Setting(containerEl)
+      .setName('Look')
+      .setDesc('For the INKLINE theme. Flat: ink and paper with one orange marker. Gradient: lit plates and glass cards with depth.')
+      .addDropdown((d) => d.addOption('gradient', 'Gradient').addOption('flat', 'Flat')
+        .setValue(s.look === 'flat' ? 'flat' : 'gradient')
+        .onChange(async (v) => { s.look = v === 'flat' ? 'flat' : 'gradient'; await save(); }));
+    new Setting(containerEl)
+      .setName('Properties')
+      .setDesc("Where a note's properties show. On top is Obsidian's way; folded keeps them one click away (the whole bar opens them); under the note puts your writing first; hidden in notes turns on Obsidian's own switch (Settings, Editor, Properties in document: Hidden) and opens the File properties panel in the right sidebar, where they show beside the note.")
+      .addDropdown((d) => d.addOption('top', 'On top').addOption('collapsed', 'On top, folded').addOption('bottom', 'Under the note').addOption('sidebar', 'Hidden in notes (right sidebar)')
+        .setValue(this.plugin.nativeProperties() === 'hidden' ? 'sidebar' : PROPERTY_PLACES.includes(s.properties) ? s.properties : 'top')
+        .onChange(async (v) => {
+          s.properties = PROPERTY_PLACES.includes(v) ? v : 'top';
+          this.plugin.folded = new WeakMap();
+          await save();
+          if (s.properties === 'sidebar') await this.plugin.showPropertiesPanel(true);
+        }));
+    new Setting(containerEl)
+      .setName('_System in the file tree')
+      .setDesc('The folder with the schema, templates, skills and tools. Hidden by default; it is still there, synced and used by your AI and the plugins.')
+      .addToggle((t) => t.setValue(!!s.showSystem).onChange(async (v) => { s.showSystem = v; await save(); }));
   }
 
   renderOutline(containerEl) {

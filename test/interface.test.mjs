@@ -169,6 +169,7 @@ function loadPlugin({
       on: () => ({}),
       getLeavesOfType: (t) => ((t === 'file-explorer' && leaf) ? [leaf] : []),
       requestSaveLayout: () => { saveLayoutCalls.n += 1; },
+      iterateAllLeaves: () => {},
     },
     metadataCache: { on: () => ({}), getFileCache: () => null },
     plugins: { enabledPlugins: new Set(styleSettings ? ['obsidian-style-settings'] : []) },
@@ -774,4 +775,70 @@ test('the auto-reveal gates are measuring a real leaf', async () => {
   await plugin.onload(); ready();
   assert.equal(plugin.autoRevealState(), true,
     'the fixture leaf reports nothing, so every assertion above is about a plugin talking to no one');
+});
+
+/* ------------------------------------------------- look, _System, properties -- */
+
+test('by default the Look is gradient, _System is hidden and the properties stay on top', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  assert.ok(body.classList.contains('inkline-gradient'), 'the gradient Look class is missing');
+  assert.ok(!body.classList.contains('inkline-flat'), 'both Look classes are on');
+  assert.ok(body.classList.contains('icor-hide-system'), '_System is not hidden by default');
+  assert.ok(!body.classList.contains('icor-props-bottom') && !body.classList.contains('icor-props-folding'), 'the properties moved without being asked');
+});
+
+test('properties under the note put one class on body, and unload takes it off', async () => {
+  const { plugin, body, ready } = loadPlugin({ saved: { properties: 'bottom', look: 'flat', showSystem: true } });
+  await plugin.onload(); ready();
+  assert.ok(body.classList.contains('icor-props-bottom'));
+  assert.ok(body.classList.contains('inkline-flat') && !body.classList.contains('inkline-gradient'));
+  assert.ok(!body.classList.contains('icor-hide-system'), '_System is hidden although the member shows it');
+  plugin.onunload();
+  for (const c of ['icor-props-bottom', 'inkline-flat', 'icor-hide-system']) assert.ok(!body.classList.contains(c), `${c} stayed after unload`);
+});
+
+test('an ICOR for Life 3.0 vault keeps the ribbon and the file controls on first run', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  plugin.app.vault.getAbstractFileByPath = (p) => (p === '_System/schema.json' ? {} : null);
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.showRibbon, true, 'the 3.0 README sends members to the ribbon, and it was hidden');
+  assert.equal(plugin.settings.showControls, true);
+  assert.ok(!body.classList.contains('icor-hide-ribbon'));
+});
+
+test('the Look, _System and the properties come over once from Objects, where they lived before 0.9.0', async () => {
+  const { plugin, body, ready, savedData } = loadPlugin({ icor: true });
+  plugin.app.vault.configDir = '.obsidian';
+  plugin.app.vault.adapter = {
+    exists: async (p) => p === '.obsidian/plugins/icor-for-life-objects/data.json',
+    read: async () => JSON.stringify({ look: 'flat', showSystem: true, properties: 'collapsed', mentions: true }),
+  };
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.look, 'flat');
+  assert.equal(plugin.settings.showSystem, true);
+  assert.equal(plugin.settings.properties, 'collapsed');
+  assert.ok(body.classList.contains('inkline-flat'));
+  assert.equal(savedData.value.properties, 'collapsed', 'the import was not saved, so it would run again');
+  assert.ok(!('mentions' in savedData.value), 'a setting that is still Objects\' came along');
+});
+
+test('hidden in notes is Obsidian\'s own switch: set to Hidden, and back to Visible when the member picks another place', async () => {
+  const { plugin, ready } = loadPlugin({ saved: { properties: 'sidebar' } });
+  const config = { propertiesInDocument: 'visible' };
+  plugin.app.vault.getConfig = (k) => config[k];
+  plugin.app.vault.setConfig = (k, v) => { config[k] = v; };
+  await plugin.onload(); ready();
+  assert.equal(config.propertiesInDocument, 'hidden');
+  plugin.settings.properties = 'top';
+  await plugin.saveSettings();
+  assert.equal(config.propertiesInDocument, 'visible');
+});
+
+test('when Obsidian\'s own switch says Hidden, the setting here says so too', async () => {
+  const { plugin, ready } = loadPlugin({ saved: { properties: 'top' } });
+  plugin.app.vault.getConfig = (k) => (k === 'propertiesInDocument' ? 'hidden' : undefined);
+  plugin.app.vault.setConfig = () => {};
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.properties, 'sidebar');
 });

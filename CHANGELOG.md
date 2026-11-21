@@ -7,6 +7,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+
+## 0.9.0 (2026-11-21)
+
+- Look and notes, a new first section: INKLINE's Look (flat or gradient), where a note's properties show (on top, on top
+  and folded, under the note, or hidden in notes with Obsidian's own switch and its File properties panel in the right
+  sidebar) and _System in the file tree. They lived in ICOR for Life - Objects until now; their values come over once.
+- Folded properties open and close anywhere on the bar, which shows how many it holds; under the note, Obsidian's room
+  to scroll past the end moves below the properties instead of sitting between the text and them.
+- Commands: switch the look, show or hide _System, show the note's properties in the right sidebar.
+- ICOR for Life 3.0 rooms: no 03 WiP, 06 is the Outer World; a 3.0 vault keeps Obsidian's ribbon and file controls on
+  first run.
+
 ## [0.8.0] - 2026-09-21
 
 ### Changed

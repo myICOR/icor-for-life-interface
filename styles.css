@@ -299,3 +299,33 @@ body.icor-status-bar-collapsed .icor-status-bar-expand:focus-visible {
 body.is-mobile .icor-status-bar-zone {
   display: none;
 }
+
+/* ---------------------------------------------------------------- _System --
+   The schema, templates, skills and tools: needed on every device, rarely opened by hand. Works on any theme. */
+body.icor-hide-system .nav-folder:has(> .nav-folder-title[data-path="_System"]) { display: none; }
+
+/* ------------------------------------------------------------ properties --
+   Folded on top: the whole bar opens and closes them (main.js forwards a click anywhere on it to Obsidian's own
+   toggle), and the bar says how many it holds. The look of the bar is the theme's. */
+body.icor-props-folding .metadata-container.is-collapsed { cursor: pointer; }
+body.icor-props-folding .metadata-properties-heading { flex: 1 1 auto; cursor: pointer; }
+body.icor-props-folding .metadata-container.is-collapsed .metadata-properties-heading[data-icor-count]:not([data-icor-count=""])::after {
+  content: attr(data-icor-count);
+  margin-left: auto;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* Under the note: the page becomes a column and the properties go last; the inline title stays first. Obsidian's
+   room to scroll past the end sits inside the editor, between the text and the properties, so it moves below them. */
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer { display: flex; flex-direction: column; padding-bottom: 40vh; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer > .cm-contentContainer { flex: none; min-height: 0; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer .cm-content { padding-bottom: 1.5em !important; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer > .metadata-container { order: 10; margin-top: 2em; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer > :not(.inline-title):not(.metadata-container):not(.cm-contentContainer) { order: 11; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer { display: flex; flex-direction: column; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer > .mod-header { display: contents; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer .metadata-container { order: 10; margin-top: 2em; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer > .mod-footer { order: 11; }
+
