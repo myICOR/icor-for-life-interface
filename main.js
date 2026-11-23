@@ -1292,7 +1292,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
 
     if (editablePath) {
       head.addText((t) => {
-        t.setPlaceholder('Folder path, e.g. 03 WiP/Clients').setValue(cfg.path)
+        t.setPlaceholder('Folder path, e.g. 04 Inner World/Notes/Clients').setValue(cfg.path)
           .onChange(async (v) => { await onChange({ path: v.trim() }); head.setName(v.trim() || 'New folder'); });
         new FolderSuggest(this.app, t.inputEl, async (path) => { await onChange({ path }); head.setName(path); });
       });

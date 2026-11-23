@@ -8,6 +8,11 @@ Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
 
+## 0.9.1 (2026-11-23)
+
+- The folder path you type when you give a folder its own colour suggests `04 Inner World/Notes/Clients` as an
+  example, no longer a `03 WiP` folder: ICOR for Life 3.0 has none.
+
 ## 0.9.0 (2026-11-21)
 
 - Look and notes, a new first section: INKLINE's Look (flat or gradient), where a note's properties show (on top, on top

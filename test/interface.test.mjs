@@ -43,7 +43,7 @@ function loadPlugin({
   const tree = explorer.createDiv({ cls: 'nav-files-container' });
 
   const paths = folders || (icor
-    ? ['00 Daily Scratchpad', '03 WiP', '03 WiP/Clients', '06 AI Team', 'Notes', 'Notes/Ideas']
+    ? ['00 Daily Scratchpad', '03 Clients', '03 Clients/Acme', '06 AI Team', 'Notes', 'Notes/Ideas']
     : ['Notes', 'Notes/Ideas', 'Archive']);
 
   const buildRows = () => {
@@ -101,7 +101,13 @@ function loadPlugin({
         fn(t);
         return this;
       }
-      addButton() { return this; } addText() { return this; } addDropdown() { return this; }
+      addText(fn) {
+        const t = { placeholder: '', inputEl: {}, setPlaceholder(p) { t.placeholder = String(p); return t; }, setValue() { return t; }, onChange() { return t; } };
+        this.text = t;
+        fn(t);
+        return this;
+      }
+      addButton() { return this; } addDropdown() { return this; }
       addExtraButton() { return this; } addColorPicker() { return this; }
     },
     FuzzySuggestModal: class { constructor() {} setPlaceholder() {} },
@@ -270,18 +276,26 @@ test('a configured folder gets the kind and the four properties the theme reads'
     'the icon still says currentColor, which has nothing to inherit inside a data URI');
 });
 
+test('3.0 has no WiP: the folder path a member types into is never shown "03 WiP" as its example', async () => {
+  const { plugin, openSettings } = loadPlugin({ saved: { folders: [{ path: '', kind: 'family', color: '#111111', icon: 'lucide-folder' }] } });
+  await plugin.onload();
+  const shown = openSettings().filter((s) => s.text).map((s) => s.text.placeholder);
+  assert.ok(shown.length, 'no folder path field was drawn for a folder the member added');
+  for (const p of shown) assert.ok(!/WiP/i.test(p), `a placeholder still names WiP: ${p}`);
+});
+
 test('a folder nobody configured is never touched', async () => {
   const { plugin, tree, ready } = loadPlugin({ saved: { folders: [{ path: 'Notes', kind: 'family', color: '#111111', icon: 'lucide-folder' }] } });
   await plugin.onload(); ready();
-  const untouched = row(tree, '03 WiP');
+  const untouched = row(tree, '03 Clients');
   assert.ok(!untouched.hasAttribute('data-icor-kind'), 'an unconfigured ICOR room was claimed; the theme owns it');
   assert.equal(untouched.style.cssText, '', 'an unconfigured row got inline properties');
 });
 
 test('a room with no label gets the folder name minus its sort prefix', async () => {
-  const { plugin, tree, ready } = loadPlugin({ saved: { folders: [{ path: '03 WiP', kind: 'room', color: '#111111', icon: 'lucide-folder' }] } });
+  const { plugin, tree, ready } = loadPlugin({ saved: { folders: [{ path: '03 Clients', kind: 'room', color: '#111111', icon: 'lucide-folder' }] } });
   await plugin.onload(); ready();
-  assert.equal(row(tree, '03 WiP').style.getPropertyValue('--room-label'), '"WiP"');
+  assert.equal(row(tree, '03 Clients').style.getPropertyValue('--room-label'), '"Clients"');
 });
 
 test('kind "none" claims the row and clears every property, so the theme leaves it alone', async () => {
