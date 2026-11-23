@@ -299,7 +299,7 @@ const DEFAULT_SETTINGS = {
   properties: 'top',
 };
 
-/* Before 0.9.0 these three lived in ICOR for Life - Objects; its settings are read once, on the first load here. */
+/* Before 0.9.0 these three lived in ICOR Objects; its settings are read once, on the first load here. */
 const FROM_OBJECTS = ['look', 'showSystem', 'properties'];
 const PROPERTY_PLACES = ['top', 'collapsed', 'bottom', 'sidebar'];
 const LOOK_CLASSES = { gradient: 'inkline-gradient', flat: 'inkline-flat' };
