@@ -905,7 +905,7 @@ class IcorInterfacePlugin extends Plugin {
     if (!tree) {
       new Notice(this.fileExplorerLeaf()
         ? "This Obsidian's file tree cannot be folded from here. Turn on Obsidian's file explorer buttons in ICOR Interface's settings and use its own button."
-        : 'The file tree is turned off: Settings, Core plugins, File explorer.');
+        : 'The file tree is turned off: turn on the file explorer core plugin first.');
       return null;
     }
     tree.setCollapseAll(!tree.isAllCollapsed);
@@ -937,7 +937,7 @@ class IcorInterfacePlugin extends Plugin {
     const cmds = this.app.commands;
     const known = cmds && typeof cmds.findCommand === 'function' ? !!cmds.findCommand(REVEAL_COMMAND) : true;
     if (!known || !cmds || typeof cmds.executeCommandById !== 'function' || !this.fileExplorerLeaf()) {
-      new Notice('The file tree is turned off: Settings, Core plugins, File explorer.');
+      new Notice('The file tree is turned off: turn on the file explorer core plugin first.');
       return false;
     }
     cmds.executeCommandById(REVEAL_COMMAND);

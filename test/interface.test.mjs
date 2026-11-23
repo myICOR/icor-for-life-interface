@@ -1219,7 +1219,7 @@ test('the collapse command withdraws without a file tree, and a tree that cannot
   assert.equal(cmd.checkCallback(true), false);
   await off.ribbons[0].cb();
   await new Promise((r) => setTimeout(r, 0));
-  assert.match(off.notices.join(' '), /Core plugins, File explorer/);
+  assert.match(off.notices.join(' '), /file explorer core plugin/);
   const old = loadPlugin({ noTree: true });
   await old.plugin.onload(); old.ready();
   await old.ribbons[0].cb();
@@ -1241,7 +1241,7 @@ test('Show the open note runs Obsidian\'s own reveal command, and says why when 
   const off = loadPlugin({ revealWorks: false });
   await off.plugin.onload(); off.ready();
   off.ribbons[1].cb();
-  assert.match(off.notices.join(' '), /Core plugins, File explorer/);
+  assert.match(off.notices.join(' '), /file explorer core plugin/);
   assert.deepEqual(off.ran, []);
 });
 
