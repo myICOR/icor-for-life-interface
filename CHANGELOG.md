@@ -8,6 +8,22 @@ Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
 
+## 0.10.0 (2026-11-23)
+
+- The folders are grouped by ICOR stage, and each stage has its own colour: Input (blue) for 00 Daily Notes and
+  01 Inbox, Control (green) for 02 Inner World, 03 Outer World, 04 Assets and 05 Databases, Output (pink) for
+  06 Planner. Refine has no folder. Every folder inside a stage folder takes the stage colour and keeps its own icon;
+  date folders stay plain. In the light theme each colour is darkened just enough to read.
+- The colours come from your vault's `_System/schema.json` (`stages`), read once and again when it changes. A schema
+  without `stages`, or none at all, uses the same map built in; an older schema that still says `rooms` works too, and
+  so do the folder names from before the stage layout (00 Daily Scratchpad, 02 Planner, 04 Inner World...).
+- Folders are matched by their full name, never by the number in front: a `06 AI Team` left from 2.x is not the
+  Output stage's `06 Planner`, and is not coloured.
+- Your own folder settings still win over the stage colour; the stage colours are never stored in your settings.
+- Settings say folders and stages: "Folder icons and colours", "ICOR for Life folders, by stage" with each folder's
+  stage and its line from the schema, the stage colours first in the colour list, and "Block" for the folder kind
+  with a coloured edge. Saved settings keep working unchanged (the stored keys keep their old names).
+
 ## 0.9.1 (2026-11-23)
 
 - The folder path you type when you give a folder its own colour suggests `04 Inner World/Notes/Clients` as an

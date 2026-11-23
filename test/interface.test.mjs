@@ -31,7 +31,7 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
    renders for them. `icor` decides whether the two ICOR marker rooms exist. */
 function loadPlugin({
   saved = null, icor = true, styleSettings = false, folders = null,
-  explorerLeaf = undefined,
+  explorerLeaf = undefined, schema = undefined,
 } = {}) {
   const body = new FakeEl('body');
   /* The host's status bar, with one core item in it, exists before any
@@ -107,8 +107,23 @@ function loadPlugin({
         fn(t);
         return this;
       }
-      addButton() { return this; } addDropdown() { return this; }
-      addExtraButton() { return this; } addColorPicker() { return this; }
+      /* Dropdown options, button texts and tooltips are words a member reads, so they are recorded too. */
+      addButton(fn) {
+        const b = { text: '', setButtonText(t) { b.text = String(t); return b; }, setCta() { return b; }, onClick() { return b; } };
+        this.button = b; if (fn) fn(b); return this;
+      }
+      addDropdown(fn) {
+        const d = { options: [], value: undefined, cb: null, addOption(k, v) { d.options.push([String(k), String(v)]); return d; }, setValue(v) { d.value = v; return d; }, onChange(cb) { d.cb = cb; return d; } };
+        (this.dropdowns = this.dropdowns || []).push(d); if (fn) fn(d); return this;
+      }
+      addExtraButton(fn) {
+        const b = { tooltip: '', setIcon() { return b; }, setTooltip(t) { b.tooltip = String(t); return b; }, onClick() { return b; } };
+        (this.extraButtons = this.extraButtons || []).push(b); if (fn) fn(b); return this;
+      }
+      addColorPicker(fn) {
+        const c = { value: undefined, setValue(v) { c.value = v; return c; }, onChange() { return c; } };
+        (this.colorPickers = this.colorPickers || []).push(c); if (fn) fn(c); return this;
+      }
     },
     FuzzySuggestModal: class { constructor() {} setPlaceholder() {} },
     AbstractInputSuggest: class { constructor() {} },
@@ -168,8 +183,16 @@ function loadPlugin({
       : (explorerLeaf === 'legacy' ? makeLeaf(false, { legacy: true }) : makeLeaf(!!explorerLeaf)));
 
   const layoutReady = [];
+  /* `schema`: the vault's _System/schema.json as an object (or a raw string); undefined means the vault has none. */
+  const schemaText = schema === undefined ? null : (typeof schema === 'string' ? schema : JSON.stringify(schema));
   const app = {
-    vault: { getRoot: () => root },
+    vault: {
+      getRoot: () => root,
+      adapter: {
+        exists: async (p) => p === '_System/schema.json' && schemaText !== null,
+        read: async (p) => { if (p === '_System/schema.json' && schemaText !== null) return schemaText; throw new Error(`no file ${p}`); },
+      },
+    },
     workspace: {
       onLayoutReady: (fn) => layoutReady.push(fn),
       on: () => ({}),
@@ -328,7 +351,7 @@ test('configuration comes back after the host rebuilds the tree', async () => {
 });
 
 test('unload releases every row it claimed', async () => {
-  const { plugin, tree, ready } = loadPlugin({ saved: { folders: [
+  const { plugin, tree, ready } = loadPlugin({ icor: false, saved: { folders: [
     { path: 'Notes', kind: 'room', color: '#111111', icon: 'lucide-folder' },
     { path: 'Notes/Ideas', kind: 'family', color: '#222222', icon: 'lucide-folder' },
   ] } });
@@ -339,69 +362,208 @@ test('unload releases every row it claimed', async () => {
   assert.equal(row(tree, 'Notes').style.cssText, '', 'inline properties outlived the plugin');
 });
 
-/* ------------------------------------------------------------- scaffold -- */
+/* --------------------------------------------------------------- stages --
+ * The ICOR stages colour the top folders (ICOR stages contract, Tom
+ * 2026-11-23): Input 00 Daily Notes, 01 Inbox; Control 02 Inner World,
+ * 03 Outer World, 04 Assets, 05 Databases; Output 06 Planner; Refine has no
+ * folder. The colour comes from the vault's _System/schema.json `stages`, and
+ * from a built-in map with the same values when the schema has none. Folders
+ * are matched by their full name, never by the number in front. */
 
-test('the scaffold list resolves rooms by prefix, so a renamed room is still listed', async () => {
-  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Scratchpad', '04 Somewhere Else', '04 Somewhere Else/Journal', '06 AI Team', '07 Data', 'Notes'] });
+const NEW_LAYOUT = ['00 Daily Notes', '01 Inbox', '02 Inner World', '02 Inner World/Journal', '02 Inner World/Journal/2026',
+  '03 Outer World', '04 Assets', '04 Assets/Images', '05 Databases', '06 Planner', 'Notes'];
+const STAGES = (colors = {}) => ({
+  input: { label: 'Input', color: colors.input || '#5271FC', folders: ['00 Daily Notes', '01 Inbox'] },
+  control: { label: 'Control', color: colors.control || '#52F49A', folders: ['02 Inner World', '03 Outer World', '04 Assets', '05 Databases'] },
+  output: { label: 'Output', color: colors.output || '#FD63FF', folders: ['06 Planner'] },
+  refine: { label: 'Refine', folders: [], about: 'no folder: the plugins (AI Chat, Connect, Focus) and the weekly review' },
+});
+const FOLDER_NOTES = {
+  '00 Daily Notes': 'your raw writing, one note a day',
+  '01 Inbox': 'anything not yet sorted',
+  '02 Inner World': 'what you know and who you know',
+  '03 Outer World': 'what others made',
+  '04 Assets': 'files only',
+  '05 Databases': 'Objects.base and data too large for notes',
+  '06 Planner': 'tasks synced from your task apps',
+};
+const STAGE_OF = {
+  '00 Daily Notes': 'input', '01 Inbox': 'input',
+  '02 Inner World': 'control', '03 Outer World': 'control', '04 Assets': 'control', '05 Databases': 'control',
+  '06 Planner': 'output',
+};
+const color = (r) => r.style.getPropertyValue('--room-color').toLowerCase();
+
+test('each new top folder gets its stage colour from the schema\'s stages, with an icon and its name minus the number', async () => {
+  /* Colours the built-in map does not have, so the only way to get them is to have read the schema. */
+  const mine = { input: '#123456', control: '#00aa55', output: '#aa00aa' };
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { schema: 1, folders: FOLDER_NOTES, stages: STAGES(mine) } });
   await plugin.onload(); ready();
-  const rows = plugin.constructor.resolveScaffold(plugin.app);
-  const paths = rows.map((r) => r.path);
-  assert.ok(paths.includes('04 Somewhere Else'), `the renamed Inner World room is not listed: ${paths}`);
-  assert.ok(paths.includes('04 Somewhere Else/Journal'), 'the Journal subfolder under the renamed room is not listed');
-  assert.ok(!paths.some((p) => p.startsWith('05 ')), 'a room that does not exist in this vault was listed anyway');
-  const inner = rows.find((r) => r.path === '04 Somewhere Else');
+  for (const [path, stage] of Object.entries(STAGE_OF)) {
+    const r = row(tree, path);
+    assert.equal(r.getAttribute('data-icor-kind'), 'room', `${path} is not drawn as a top folder`);
+    assert.equal(color(r), mine[stage], `${path} does not carry the ${stage} colour from the schema`);
+    assert.ok(r.style.getPropertyValue('--room-color-paper'), `${path} has no paper colour`);
+    assert.match(r.style.getPropertyValue('--room-icon'), /^url\("data:image\/svg\+xml,/, `${path} has no icon`);
+    assert.equal(r.style.getPropertyValue('--room-label'), JSON.stringify(path.replace(/^\d{2} /, '')), `${path} is not labelled by its name`);
+    assert.equal(r.getAttribute('data-icor-stage'), stage, `${path} does not say which stage it belongs to`);
+  }
+  assert.ok(!row(tree, 'Notes').hasAttribute('data-icor-kind'), 'a folder in no stage was claimed');
+});
+
+test('a folder inside a stage folder takes the stage colour; a date folder does not', async () => {
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { folders: FOLDER_NOTES, stages: STAGES({ control: '#00aa55' }) } });
+  await plugin.onload(); ready();
+  const journal = row(tree, '02 Inner World/Journal');
+  assert.equal(journal.getAttribute('data-icor-kind'), 'family');
+  assert.equal(color(journal), '#00aa55', 'Journal does not carry its stage\'s colour');
+  assert.match(journal.style.getPropertyValue('--room-icon'), /notebook-pen/, 'Journal lost its own icon');
+  assert.ok(!row(tree, '02 Inner World/Journal/2026').hasAttribute('data-icor-kind'), 'a date folder was coloured');
+});
+
+test('a schema without stages falls back to the built-in stage map', async () => {
+  for (const schema of [{ schema: 1, folders: FOLDER_NOTES }, undefined, 'not json at all']) {
+    const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema });
+    await plugin.onload(); ready();
+    const want = { input: '#5271fc', control: '#52f49a', output: '#fd63ff' };
+    for (const [path, stage] of Object.entries(STAGE_OF)) {
+      assert.equal(color(row(tree, path)), want[stage], `${path} is not ${stage} with schema ${JSON.stringify(schema)}`);
+    }
+  }
+});
+
+test('a legacy schema that still says "rooms" works: its folders are coloured by stage and its descriptions shown', async () => {
+  const legacy = ['00 Daily Scratchpad', '01 Inbox', '02 Planner', '04 Inner World', '05 Assets', '06 Outer World', '07 Databases'];
+  const { plugin, tree, ready, openSettings } = loadPlugin({
+    folders: legacy,
+    schema: { schema: 1, rooms: { '04 Inner World': 'what you know and who you know', '02 Planner': 'tasks synced from your task apps' } },
+  });
+  await plugin.onload(); ready();
+  assert.equal(color(row(tree, '04 Inner World')), '#52f49a', 'the Inner World of a vault before the stage layout is not Control');
+  assert.equal(color(row(tree, '02 Planner')), '#fd63ff', 'the Planner of a vault before the stage layout is not Output');
+  assert.equal(color(row(tree, '00 Daily Scratchpad')), '#5271fc');
+  const descs = openSettings().map((x) => x.desc).join('\n');
+  assert.match(descs, /what you know and who you know/, 'the description from "rooms" is not shown with its folder');
+});
+
+test('"06 AI Team" (2.x) is never coloured as Output: folders match by full name, not by number', async () => {
+  for (const schema of [{ folders: FOLDER_NOTES, stages: STAGES() }, undefined]) {
+    const { plugin, tree, ready } = loadPlugin({ folders: ['06 AI Team', '06 AI Team/Agents', '06 Planner', '03 WiP', '02 Somewhere Else'], schema });
+    await plugin.onload(); ready();
+    for (const p of ['06 AI Team', '06 AI Team/Agents', '03 WiP', '02 Somewhere Else']) {
+      const r = row(tree, p);
+      assert.ok(!r.hasAttribute('data-icor-kind'), `${p} was claimed for a stage`);
+      assert.equal(r.style.cssText, '', `${p} carries a colour`);
+    }
+    assert.equal(color(row(tree, '06 Planner')), '#fd63ff');
+  }
+});
+
+test('a member\'s own folder settings win over the stage colour', async () => {
+  const { plugin, tree, ready } = loadPlugin({
+    folders: NEW_LAYOUT,
+    schema: { folders: FOLDER_NOTES, stages: STAGES() },
+    saved: { folders: [
+      { path: '02 Inner World', kind: 'room', color: '#ff0000', colorPaper: '#880000', icon: 'heart', label: 'Mine' },
+      { path: '06 Planner', kind: 'none' },
+    ] },
+  });
+  await plugin.onload(); ready();
+  const inner = row(tree, '02 Inner World');
+  assert.equal(color(inner), '#ff0000', 'the stage colour beat the member\'s');
+  assert.equal(inner.style.getPropertyValue('--room-label'), '"Mine"');
+  const planner = row(tree, '06 Planner');
+  assert.equal(planner.getAttribute('data-icor-kind'), 'none', 'the member switched the Planner off and it is still drawn');
+  assert.equal(planner.style.cssText, '');
+  assert.equal(color(row(tree, '03 Outer World')), '#52f49a', 'the folders the member left alone lost their stage colour');
+});
+
+test('a schema colour that is not a colour never reaches the row', async () => {
+  const bad = STAGES({ input: 'red;} body{display:none' });
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { stages: bad } });
+  await plugin.onload(); ready();
+  const v = color(row(tree, '00 Daily Notes'));
+  assert.ok(!/[;{}]/.test(v), `a schema value went into the style as written: ${v}`);
+  assert.equal(v, '#5271fc', 'a broken stage colour does not fall back to the built-in one');
+});
+
+test('no member-visible settings text says room, scaffold, local folder, full stack or harness', async () => {
+  const { plugin, ready, openSettings } = loadPlugin({
+    folders: NEW_LAYOUT,
+    schema: { folders: FOLDER_NOTES, stages: STAGES() },
+    saved: { folders: [{ path: 'Notes', kind: 'room', color: '#111111', icon: 'folder' }, { path: '02 Inner World', kind: 'family', color: '#222222' }] },
+  });
+  await plugin.onload(); ready();
+  const words = [];
+  for (const x of openSettings()) {
+    words.push(x.name, x.desc);
+    if (x.text) words.push(x.text.placeholder);
+    if (x.button) words.push(x.button.text);
+    for (const d of x.dropdowns || []) for (const [, label] of d.options) words.push(label);
+    for (const b of x.extraButtons || []) words.push(b.tooltip);
+  }
+  assert.ok(words.length > 30, 'the settings tab drew almost nothing; the check would pass on an empty tab');
+  const bad = words.filter((w) => /\brooms?\b|scaffold|local folder|full stack|harness/i.test(w));
+  assert.deepEqual(bad, [], 'settings text a member reads uses a word it must not');
+  assert.ok(words.some((w) => /\bstage/i.test(w)), 'the settings never mention the ICOR stages');
+});
+
+test('the ICOR folder list shows the stage folders that exist, by full name, starting from the stage colour', async () => {
+  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Notes', '02 Inner World', '02 Inner World/Journal', '06 AI Team', 'Notes'] });
+  await plugin.onload(); ready();
+  const rows = plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap);
+  const paths = Array.from(rows, (r) => r.path);
+  assert.deepEqual(paths.sort(), ['00 Daily Notes', '02 Inner World', '02 Inner World/Journal'], `listed: ${paths}`);
+  const inner = rows.find((r) => r.path === '02 Inner World');
   assert.equal(inner.defaults.kind, 'room');
-  assert.equal(inner.defaults.color, '#7d9a7f', 'Inner World does not show the theme\'s own green');
+  assert.equal(inner.defaults.color.toLowerCase(), '#52f49a');
   assert.equal(inner.defaults.icon, 'sprout');
   assert.equal(inner.defaults.label, 'Inner World');
-  /* Room 07 keys on its prefix too: "07 Data" (the private-vault name) still
-   * resolves to the Databases room with the theme's own rose. */
-  const databases = rows.find((r) => r.path === '07 Data');
-  assert.ok(databases, `the 07 room is not listed: ${paths}`);
-  assert.equal(databases.defaults.kind, 'room');
-  assert.equal(databases.defaults.color, '#b57a86', 'room 07 does not show the theme\'s own rose ink');
-  assert.equal(databases.defaults.colorPaper, '#8f5560', 'room 07 does not show the theme\'s own rose paper');
-  assert.equal(databases.defaults.icon, 'database');
-  assert.equal(databases.defaults.label, 'Databases');
+  assert.equal(inner.stage.key, 'control');
 });
 
-test('editing a scaffold folder stores an override starting from the theme\'s values', async () => {
-  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['04 Inner World', '04 Inner World/Journal', '00 Daily Scratchpad', '06 AI Team'] });
+test('editing a stage folder stores an override starting from the stage\'s values', async () => {
+  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['02 Inner World', '02 Inner World/Journal', '00 Daily Notes'] });
   await plugin.onload(); ready();
-  const rows = plugin.constructor.resolveScaffold(plugin.app);
-  const journal = rows.find((r) => r.path === '04 Inner World/Journal');
+  const journal = plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap).find((r) => r.path === '02 Inner World/Journal');
   await plugin.overrideFolder(journal.defaults, { color: '#ff0000' });
-
-  const stored = savedData.value.folders.find((f) => f.path === '04 Inner World/Journal');
+  const stored = savedData.value.folders.find((f) => f.path === '02 Inner World/Journal');
   assert.ok(stored, 'no override was stored');
   assert.equal(stored.color, '#ff0000', 'the change was not stored');
-  assert.equal(stored.icon, 'notebook-pen', 'the override lost the theme\'s icon; changing one thing changed two');
-  assert.equal(stored.colorPaper, '#7f662f', 'the override lost the theme\'s paper colour');
-  const r = row(tree, '04 Inner World/Journal');
-  assert.equal(r.getAttribute('data-icor-kind'), 'family', 'the row was not claimed after the override');
-  assert.equal(r.style.getPropertyValue('--room-color'), '#ff0000');
+  assert.equal(stored.icon, 'notebook-pen', 'the override lost its icon; changing one thing changed two');
+  assert.ok(stored.colorPaper, 'the override lost the paper colour');
+  const r = row(tree, '02 Inner World/Journal');
+  assert.equal(r.getAttribute('data-icor-kind'), 'family');
+  assert.equal(color(r), '#ff0000');
 });
 
-test('resetting a scaffold folder removes the override and releases the row to the theme', async () => {
-  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['04 Inner World', '00 Daily Scratchpad', '06 AI Team'] });
+test('resetting a stage folder removes the override and gives it its stage colour back', async () => {
+  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['02 Inner World', '00 Daily Notes'] });
   await plugin.onload(); ready();
-  const inner = plugin.constructor.resolveScaffold(plugin.app).find((r) => r.path === '04 Inner World');
-  await plugin.overrideFolder(inner.defaults, { icon: 'heart' });
-  assert.ok(row(tree, '04 Inner World').hasAttribute('data-icor-kind'), 'not claimed to begin with');
-
-  await plugin.resetFolder('04 Inner World');
+  const inner = plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap).find((r) => r.path === '02 Inner World');
+  await plugin.overrideFolder(inner.defaults, { color: '#ff0000' });
+  assert.equal(color(row(tree, '02 Inner World')), '#ff0000');
+  await plugin.resetFolder('02 Inner World');
   assert.equal(savedData.value.folders.length, 0, 'the override survived the reset');
-  const r = row(tree, '04 Inner World');
-  assert.ok(!r.hasAttribute('data-icor-kind'), 'the row was not released to the theme');
-  assert.equal(r.style.cssText, '', 'inline properties survived the reset');
+  assert.equal(color(row(tree, '02 Inner World')), '#52f49a', 'the reset did not bring the stage colour back');
 });
 
-test('only what the user changed is stored: an untouched scaffold list stores nothing', async () => {
-  const { plugin, ready, savedData } = loadPlugin({ icor: true });
+test('only what the member changed is stored: stage colours are never written to settings', async () => {
+  const { plugin, ready, savedData } = loadPlugin({ folders: NEW_LAYOUT, schema: { stages: STAGES() } });
   await plugin.onload(); ready();
-  plugin.constructor.resolveScaffold(plugin.app);
-  assert.ok(!savedData.value || !savedData.value.folders || savedData.value.folders.length === 0,
-    'listing the scaffold wrote overrides for it; the theme is the source of truth and the plugin must store only changes');
+  plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap);
+  await plugin.saveSettings();
+  assert.ok(!savedData.value.folders || savedData.value.folders.length === 0,
+    'the stage colours were stored as overrides; the schema is where they live');
+});
+
+test('unload takes the stage colours off every row', async () => {
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT });
+  await plugin.onload(); ready();
+  assert.ok(tree.querySelectorAll('[data-icor-managed]').length >= 7, 'the stage folders were not claimed');
+  plugin.onunload();
+  assert.equal(tree.querySelectorAll('[data-icor-managed]').length, 0);
+  assert.ok(!row(tree, '02 Inner World').hasAttribute('data-icor-stage'), 'the stage attribute outlived the plugin');
 });
 
 /* ------------------------------------------------------------ positives -- */

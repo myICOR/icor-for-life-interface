@@ -2,7 +2,7 @@
 
 **Decide what your vault shows you.**
 
-Obsidian's own chrome, your rooms' colours and icons, the status bar, the
+Obsidian's own chrome, your folders' colours and icons, the status bar, the
 Outline depth: all the switches in one settings page instead of scattered
 across five.
 
@@ -21,7 +21,7 @@ shown**. No double negatives.
 ## Before you start
 
 Install the [ICOR for Life - INKLINE](https://github.com/myICOR/icor-for-life-inkline)
-theme first. The theme draws the chrome and the rooms; this plugin owns the
+theme first. The theme draws the chrome and the folders; this plugin owns the
 settings the theme reads. Without it, several switches will move and change
 nothing.
 
@@ -32,7 +32,13 @@ viewer, and the collapsible status bar.
 
 **Obsidian's chrome.** The left ribbon. Obsidian's own file controls, meaning
 the vault switcher and the New note, New folder and sort buttons. The ICOR for
-Life banner. Room icons and colours. The handwritten layer.
+Life banner. Folder icons and colours. The handwritten layer.
+
+**Your folders, by ICOR stage.** Each stage colours its folders: Input (blue)
+00 Daily Notes and 01 Inbox; Control (green) 02 Inner World, 03 Outer World,
+04 Assets and 05 Databases; Output (pink) 06 Planner. Refine has no folder.
+The colours come from your vault's `_System/schema.json`. Give any folder its
+own colour, icon and label instead; yours always wins.
 
 **The status bar.** Collapsible, on by default. Fold it away with the small
 control at its left edge, bring it back with the round button at the bottom
@@ -50,6 +56,8 @@ and this plugin steps aside, so the two never disagree.
 ## What it touches
 
 - **Your vault's appearance settings**, which is the whole point.
+- **One file is read: `_System/schema.json`**, for the ICOR stages and their
+  colours. It is never written.
 - **Nothing else.** No notes are read or written.
 
 **It makes no network connection and starts no process.**
