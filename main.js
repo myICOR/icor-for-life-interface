@@ -314,12 +314,15 @@ const PROPS_FOLD_CLASS = 'icor-props-folding';
 const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
 
 /* The file explorer's button row (0.11.0, Tom 2026-11-23). One body class hides the row (styles.css, any theme); this
-   file never names or touches the row itself, so taking the class off gives Obsidian's row back exactly as it was.
+   file never writes into the row, so taking the class off gives Obsidian's row back exactly as it was.
    Its two buttons worth having move to the left ribbon, where members reorder or hide them under Settings,
-   Appearance, Ribbon menu like any plugin's icon: Collapse all (a toggle, like the host's own button) and reveal the
-   open note, which runs Obsidian's own command. */
+   Appearance, Ribbon menu like any plugin's icon: Collapse all (which presses the host's own button, hidden or not)
+   and reveal the open note, which runs Obsidian's own command. */
 const EXPLORER_BUTTONS_CLASS = 'icor-hide-explorer-buttons';
 const REVEAL_COMMAND = 'file-explorer:reveal-active-file';
+/* The host's row inside the file explorer view, only ever read (to find its own Collapse all button and press it):
+   see collapseButton. */
+const EXPLORER_ROW = '.nav-buttons-container';
 const REVEAL_ICON = 'navigation';
 const REVEAL_LABEL = 'Show the open note in the file tree';
 const COLLAPSE_ICON = 'chevrons-down-up';
@@ -620,7 +623,7 @@ class IcorInterfacePlugin extends Plugin {
     this.applyStatusBar();
     this.applyNotes();
     /* Not a theme class: this plugin's, whoever owns the five switches below. */
-    document.body.classList.toggle(EXPLORER_BUTTONS_CLASS, !this.settings.showExplorerButtons);
+    document.body.toggleClass(EXPLORER_BUTTONS_CLASS, !this.settings.showExplorerButtons);
     if (this.styleSettingsActive()) return;
     for (const s of SWITCHES) {
       const on = !!this.settings[s.key];
@@ -875,53 +878,55 @@ class IcorInterfacePlugin extends Plugin {
   }
 
   /* ------------------------------------------------ the explorer's buttons --
-   * Collapse all is the file tree's own toggle: `tree.setCollapseAll()`, the
-   * method the host's button calls (Obsidian 1.15.1 bundle, 2026-11-23), so the
-   * folds are saved and the host's button, when shown, flips with it. Not in
-   * obsidian.d.ts, so it is probed, never assumed; a sidebar Obsidian has not
-   * loaded yet (a deferred view) is loaded first. Reveal is Obsidian's own
-   * command, run by id. Neither touches the row. */
-  async explorerTree() {
+   * Collapse all is not in Obsidian's API and has no command, so the ribbon
+   * icon presses the host's OWN button, as ICOR Connect's command does: one
+   * implementation, the folds saved by the host, and the host's button (when
+   * shown) flipping with it. The button is found by its glyph, which the host
+   * swaps between `chevrons-down-up` (collapse) and `chevrons-up-down` (all
+   * folded, so expand); a hidden button still takes a click. The row is only
+   * read and clicked, never written: no class, attribute or child of it is
+   * changed here. A sidebar tab Obsidian has not loaded since start
+   * (`isDeferred`) is loaded first, through the public `loadIfDeferred`. */
+  collapseButton() {
     const leaf = this.fileExplorerLeaf();
-    if (!leaf) return null;
-    if (leaf.isDeferred && typeof leaf.loadIfDeferred === 'function') {
-      await leaf.loadIfDeferred();
-      this.treeWasDeferred = true;
+    const root = leaf && leaf.view && leaf.view.containerEl;
+    const row = root && typeof root.querySelector === 'function' ? root.querySelector(EXPLORER_ROW) : null;
+    if (!row) return null;
+    for (const btn of row.querySelectorAll('.clickable-icon')) {
+      if (btn.querySelector('.lucide-chevrons-down-up')) return { btn, folded: false };
+      if (btn.querySelector('.lucide-chevrons-up-down')) return { btn, folded: true };
     }
-    const tree = leaf.view && leaf.view.tree;
-    return tree && typeof tree.setCollapseAll === 'function' ? tree : null;
+    return null;
   }
 
-  /* A press does what the icon said. Normally that is the tree's own state; but a tree Obsidian had not loaded yet
-     (a sidebar tab never shown since start) could not tell the icon anything, so on the press that loads it the
-     icon's word wins, and from then on the two agree. */
+  /* A press does what the icon said. Normally the host's button and the icon agree; but a tree Obsidian had not
+     loaded yet could not tell the icon anything, so on the press that loads it, a tree already folded the way the icon
+     offered is left as it is and only the icon catches up. */
   async toggleCollapseAll({ fromRibbon = false } = {}) {
-    this.treeWasDeferred = false;
-    const tree = await this.explorerTree();
-    if (tree && fromRibbon && this.treeWasDeferred && this.collapseRibbonEl) {
-      const fold = this.collapseRibbonEl.getAttribute('aria-label') !== EXPAND_LABEL;
-      if (!!tree.isAllCollapsed === fold) tree.isAllCollapsed = !fold;
-    }
-    if (!tree) {
-      new Notice(this.fileExplorerLeaf()
-        ? "This Obsidian's file tree cannot be folded from here. Turn on Obsidian's file explorer buttons in ICOR Interface's settings and use its own button."
-        : 'The file tree is turned off: turn on the file explorer core plugin first.');
+    const leaf = this.fileExplorerLeaf();
+    if (!leaf) { new Notice('The file tree is turned off: turn on the file explorer core plugin first.'); return null; }
+    const wasDeferred = !!leaf.isDeferred;
+    if (wasDeferred && typeof leaf.loadIfDeferred === 'function') await leaf.loadIfDeferred();
+    const found = this.collapseButton();
+    if (!found) {
+      new Notice('This version of Obsidian has no collapse button in the file tree.');
       return null;
     }
-    tree.setCollapseAll(!tree.isAllCollapsed);
-    this.syncCollapseRibbon(tree);
-    return !!tree.isAllCollapsed;
+    if (fromRibbon && wasDeferred && this.collapseRibbonEl) {
+      const fold = this.collapseRibbonEl.getAttribute('aria-label') !== EXPAND_LABEL;
+      if (found.folded === fold) { this.syncCollapseRibbon(); return found.folded; }
+    }
+    found.btn.click();
+    this.syncCollapseRibbon();
+    return !found.folded;
   }
 
-  /* The ribbon icon says what a press will do, as the host's button does: all folded, it offers to expand. */
-  syncCollapseRibbon(tree) {
+  /* The ribbon icon says what a press will do, read off the host's button: all folded, it offers to expand. */
+  syncCollapseRibbon() {
     const el = this.collapseRibbonEl;
     if (!el) return;
-    if (tree === undefined) {
-      const leaf = this.fileExplorerLeaf();
-      tree = leaf && leaf.view && leaf.view.tree;
-    }
-    const folded = !!(tree && tree.isAllCollapsed);
+    const found = this.collapseButton();
+    const folded = !!(found && found.folded);
     setIcon(el, folded ? EXPAND_ICON : COLLAPSE_ICON);
     const label = folded ? EXPAND_LABEL : COLLAPSE_LABEL;
     if (typeof setTooltip === 'function') setTooltip(el, label);
@@ -957,7 +962,7 @@ class IcorInterfacePlugin extends Plugin {
        change. Debounced: reapplying is repair work nobody is watching. */
     this.observer = new MutationObserver(() => {
       window.clearTimeout(this.observerTimer);
-      this.observerTimer = window.setTimeout(() => this.applyFolders(), 150);
+      this.observerTimer = window.setTimeout(() => { this.applyFolders(); this.syncCollapseRibbon(); }, 150);
     });
     this.observer.observe(explorer, { childList: true, subtree: true });
   }

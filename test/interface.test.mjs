@@ -41,6 +41,23 @@ function loadPlugin({
   statusBar.createDiv({ cls: 'status-bar-item plugin-word-count', text: '12 words' });
   const commands = [];
   const explorer = body.createDiv({ cls: 'workspace-leaf-content', attr: { 'data-type': 'file-explorer' } });
+  /* The host's button row, as Obsidian 1.15.1 builds it: its Collapse all button swaps its glyph on a click
+     (chevrons-down-up: collapse; chevrons-up-down: all folded, expand). `deferred` leaves it out until the tab
+     loads; `noTree` is a host with no such button. */
+  const hostCollapse = { folded: allCollapsed, clicks: 0, btn: null };
+  const buildRow = () => {
+    const header = explorer.createDiv({ cls: 'nav-header' });
+    const row = header.createDiv({ cls: 'nav-buttons-container' });
+    row.createDiv({ cls: 'clickable-icon nav-action-button', attr: { 'aria-label': 'New note' } }).createEl('svg', { cls: 'svg-icon lucide-edit' });
+    if (noTree) return row;
+    const btn = row.createDiv({ cls: 'clickable-icon nav-action-button' });
+    const draw = () => { btn.empty(); btn.createEl('svg', { cls: `svg-icon ${hostCollapse.folded ? 'lucide-chevrons-up-down' : 'lucide-chevrons-down-up'}` }); };
+    draw();
+    btn.addEventListener('click', () => { hostCollapse.folded = !hostCollapse.folded; hostCollapse.clicks += 1; draw(); });
+    hostCollapse.btn = btn;
+    return row;
+  };
+  if (!deferred && explorerLeaf !== null) buildRow();
   const tree = explorer.createDiv({ cls: 'nav-files-container' });
 
   const paths = folders || (icor
@@ -174,13 +191,11 @@ function loadPlugin({
      `explorerLeaf: null` is a vault whose core File explorer is turned off. */
   const leafCalls = [];
   const saveLayoutCalls = { n: 0 };
-  /* The file tree the explorer view holds, with the host's own collapse-all toggle (Obsidian 1.15.1). */
-  const fileTree = { isAllCollapsed: allCollapsed, calls: [], setCollapseAll(v) { this.calls.push(v); this.isAllCollapsed = v; } };
-  /* `deferred`: a sidebar tab Obsidian has not loaded since start; its view has no tree until loadIfDeferred. */
+  /* `deferred`: a sidebar tab Obsidian has not loaded since start; its row exists only after loadIfDeferred. */
   const makeLeaf = (autoReveal, { legacy = false } = {}) => ({
     isDeferred: deferred,
-    view: (noTree || deferred) ? {} : { tree: fileTree },
-    async loadIfDeferred() { if (this.isDeferred) { this.isDeferred = false; this.view = { tree: fileTree }; } },
+    view: { containerEl: explorer },
+    async loadIfDeferred() { if (this.isDeferred) { this.isDeferred = false; buildRow(); } },
     getViewState: () => {
       const state = { sortOrder: 'alphabetical', showSearch: false, searchQuery: '' };
       /* Obsidian 1.5.0 to 1.8.2: the file explorer predates the setting and
@@ -245,7 +260,7 @@ function loadPlugin({
   };
   return {
     plugin, body, explorer, tree, statusBar, commands, buildRows, savedData,
-    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings, ribbons, ran, fileTree,
+    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings, ribbons, ran, hostCollapse,
     ready: () => layoutReady.forEach((f) => f()),
   };
 }
@@ -1189,18 +1204,20 @@ test('two ribbon icons, each with a tooltip that says what it does', async () =>
   for (const r of ribbons) assert.match(r.title, /^[A-Z][a-z]/);
 });
 
-test('Collapse all folds the tree with the host\'s own toggle, and the icon then offers to expand', async () => {
-  const { plugin, ribbons, fileTree, ready } = loadPlugin();
+test('Collapse all presses the host\'s own button, and the icon then offers to expand', async () => {
+  const { plugin, ribbons, hostCollapse, ready } = loadPlugin();
   await plugin.onload(); ready();
   const [collapse] = ribbons;
   await collapse.cb();
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(fileTree.calls, [true]);
+  assert.equal(hostCollapse.clicks, 1);
+  assert.equal(hostCollapse.folded, true);
   assert.equal(collapse.el.getAttribute('aria-label'), 'Expand all folders');
   assert.equal(collapse.el.attrs['data-icon'], 'chevrons-up-down');
   await collapse.cb();
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(fileTree.calls, [true, false]);
+  assert.equal(hostCollapse.clicks, 2);
+  assert.equal(hostCollapse.folded, false);
   assert.equal(collapse.el.getAttribute('aria-label'), 'Collapse all folders');
   assert.equal(collapse.el.attrs['data-icon'], 'chevrons-down-up');
 });
@@ -1224,7 +1241,7 @@ test('the collapse command withdraws without a file tree, and a tree that cannot
   await old.plugin.onload(); old.ready();
   await old.ribbons[0].cb();
   await new Promise((r) => setTimeout(r, 0));
-  assert.match(old.notices.join(' '), /Show Obsidian's file explorer buttons|file explorer buttons/);
+  assert.match(old.notices.join(' '), /no collapse button/);
 });
 
 test('Show the open note runs Obsidian\'s own reveal command, and says why when it cannot', async () => {
@@ -1254,21 +1271,49 @@ test('the row is only hidden: under the class, in the file explorer, the header 
   assert.match(decl, /^\s*display:\s*none;\s*$/);
 });
 
-test('nothing is written into the explorer\'s button row: the code never names it', () => {
-  assert.doesNotMatch(source, /nav-buttons-container|nav-action-button|addNavButton/);
+test('nothing is written into the explorer\'s button row: it is only read and its own button pressed', async () => {
+  /* The source: the row is named once, as a selector, and used only by document.querySelector. */
+  assert.equal((source.match(/nav-buttons-container/g) || []).length, 1, 'the row is named in one place');
+  assert.match(source, /const EXPLORER_ROW = '\.nav-buttons-container';/);
+  assert.equal((source.match(/EXPLORER_ROW/g) || []).length, 2, 'declared, and read in one place');
+  assert.match(source, /root\.querySelector\(EXPLORER_ROW\)/);
+  assert.doesNotMatch(source, /nav-action-button|addNavButton/);
+  /* The behaviour: load, both icons, the setting both ways, unload; the row has the same classes, attributes and
+     children (the host's own glyph swap aside) as the host built it. */
+  const { plugin, explorer, ribbons, ready, openSettings } = loadPlugin();
+  const row = explorer.querySelector('.nav-buttons-container');
+  const snap = () => JSON.stringify({ cls: [...row.classSet].sort(), attrs: row.attrs, kids: row.children.map((c) => [[...c.classSet].sort(), c.attrs]) });
+  const before = snap();
+  await plugin.onload(); ready();
+  await ribbons[0].cb(); await ribbons[0].cb(); ribbons[1].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  await explorerRow(openSettings).toggle.cb(true);
+  await explorerRow(openSettings).toggle.cb(false);
+  plugin.onunload();
+  assert.equal(snap(), before, 'the row was changed');
 });
 
-test('a file tree Obsidian had not loaded yet does what the icon said on the press that loads it', async () => {
+test('a file tree Obsidian had not loaded yet is never unfolded by a press that offered Collapse', async () => {
   /* Measured in the demo vault, 2026-11-23: the tab was deferred, the icon said Collapse, the tree loaded all folded,
-     and the press expanded. */
-  const { plugin, ribbons, fileTree, ready, commands } = loadPlugin({ deferred: true, allCollapsed: true });
+     and the press expanded. Now the tree stays folded and the icon catches up. */
+  const { plugin, ribbons, hostCollapse, ready, commands } = loadPlugin({ deferred: true, allCollapsed: true });
   await plugin.onload(); ready();
   assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Collapse all folders', 'nothing to read yet: the icon offers Collapse');
   await ribbons[0].cb();
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(fileTree.calls, [true], 'the press folded, as the icon said');
+  assert.equal(hostCollapse.clicks, 0, 'already folded, as the icon offered: nothing pressed');
+  assert.equal(hostCollapse.folded, true);
   assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Expand all folders');
   await commands.find((c) => c.id === 'collapse-all-folders').checkCallback(false);
   await new Promise((r) => setTimeout(r, 0));
-  assert.deepEqual(fileTree.calls, [true, false], 'from then on the tree\'s own state decides');
+  assert.equal(hostCollapse.folded, false, 'from then on the host\'s button decides');
+});
+
+test('a deferred tree that is not folded yet is folded by the press that loads it', async () => {
+  const { plugin, ribbons, hostCollapse, ready } = loadPlugin({ deferred: true, allCollapsed: false });
+  await plugin.onload(); ready();
+  await ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(hostCollapse.clicks, 1);
+  assert.equal(hostCollapse.folded, true);
 });

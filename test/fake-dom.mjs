@@ -66,6 +66,8 @@ class FakeEl {
   }
   getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
   addClass(c) { this.classSet.add(c); }
+  /* Obsidian's own HTMLElement.toggleClass(cls, on) */
+  toggleClass(c, on) { if (on) this.classSet.add(c); else this.classSet.delete(c); }
   appendChild(node) {
     if (node.parentElement) node.parentElement.removeChild(node);
     node.parentElement = this;

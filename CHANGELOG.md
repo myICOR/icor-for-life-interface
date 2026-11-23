@@ -10,9 +10,9 @@ GitHub; this file starts with 0.6.3.
 ## 0.11.0 (2026-11-23)
 
 - The file explorer's button row (New note, New folder, Change sort order, Auto-reveal current file, Collapse all) is hidden by default. A new setting, "Show Obsidian's file explorer buttons", brings Obsidian's row back exactly as it was.
-- Two icons in the left ribbon take over the buttons worth having: Collapse all folders (a toggle: all folded, it offers to expand, like Obsidian's own button) and Show the open note in the file tree (Obsidian's own reveal command). Reorder or hide them under Settings, Appearance, Ribbon menu.
+- Two icons in the left ribbon take over the buttons worth having: Collapse all folders (it presses Obsidian's own Collapse all button, hidden or not, so it is a toggle: all folded, it offers to expand) and Show the open note in the file tree (Obsidian's own reveal command). Reorder or hide them under Settings, Appearance, Ribbon menu.
 - New command: "Collapse or expand all folders in the file tree", for a hotkey. Reveal already has Obsidian's own command.
-- Nothing is written into the button row: one body class hides it, on any theme.
+- Nothing is written into the button row: one body class hides it, on any theme, and the row is only read to press its own button.
 
 ## 0.10.4 (2026-11-23)
 
