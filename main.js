@@ -435,7 +435,7 @@ class IcorInterfacePlugin extends Plugin {
 
     /* The file explorer's two buttons, in the ribbon. The ribbon item keeps the name it was added with (that is what
        the Ribbon menu lists); only its icon and tooltip follow the tree, the way the host's own button does. */
-    this.collapseRibbonEl = this.addRibbonIcon(COLLAPSE_ICON, COLLAPSE_LABEL, () => { void this.toggleCollapseAll(); });
+    this.collapseRibbonEl = this.addRibbonIcon(COLLAPSE_ICON, COLLAPSE_LABEL, () => { void this.toggleCollapseAll({ fromRibbon: true }); });
     this.addRibbonIcon(REVEAL_ICON, REVEAL_LABEL, () => this.revealActiveFile());
     /* Reveal has its command already: Obsidian's own, "Reveal current file in navigation". Collapse has none in the
        host, so it gets one here; it withdraws when there is no tree to fold. */
@@ -495,6 +495,7 @@ class IcorInterfacePlugin extends Plugin {
     });
     this.registerEvent(this.app.workspace.on('layout-change', () => {
       this.applyChrome();
+      this.syncCollapseRibbon();
       this.applyFolders();
       this.observeExplorer();
     }));
@@ -883,13 +884,24 @@ class IcorInterfacePlugin extends Plugin {
   async explorerTree() {
     const leaf = this.fileExplorerLeaf();
     if (!leaf) return null;
-    if (leaf.isDeferred && typeof leaf.loadIfDeferred === 'function') await leaf.loadIfDeferred();
+    if (leaf.isDeferred && typeof leaf.loadIfDeferred === 'function') {
+      await leaf.loadIfDeferred();
+      this.treeWasDeferred = true;
+    }
     const tree = leaf.view && leaf.view.tree;
     return tree && typeof tree.setCollapseAll === 'function' ? tree : null;
   }
 
-  async toggleCollapseAll() {
+  /* A press does what the icon said. Normally that is the tree's own state; but a tree Obsidian had not loaded yet
+     (a sidebar tab never shown since start) could not tell the icon anything, so on the press that loads it the
+     icon's word wins, and from then on the two agree. */
+  async toggleCollapseAll({ fromRibbon = false } = {}) {
+    this.treeWasDeferred = false;
     const tree = await this.explorerTree();
+    if (tree && fromRibbon && this.treeWasDeferred && this.collapseRibbonEl) {
+      const fold = this.collapseRibbonEl.getAttribute('aria-label') !== EXPAND_LABEL;
+      if (!!tree.isAllCollapsed === fold) tree.isAllCollapsed = !fold;
+    }
     if (!tree) {
       new Notice(this.fileExplorerLeaf()
         ? "This Obsidian's file tree cannot be folded from here. Turn on Obsidian's file explorer buttons in ICOR Interface's settings and use its own button."

@@ -32,7 +32,7 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
 function loadPlugin({
   saved = null, icor = true, styleSettings = false, folders = null,
   explorerLeaf = undefined, schema = undefined, leftRibbon = undefined, theme = undefined, customTheme = undefined,
-  allCollapsed = false, noTree = false, activeFile = 'Notes/a.md', revealWorks = true,
+  allCollapsed = false, noTree = false, activeFile = 'Notes/a.md', revealWorks = true, deferred = false,
 } = {}) {
   const body = new FakeEl('body');
   /* The host's status bar, with one core item in it, exists before any
@@ -176,8 +176,11 @@ function loadPlugin({
   const saveLayoutCalls = { n: 0 };
   /* The file tree the explorer view holds, with the host's own collapse-all toggle (Obsidian 1.15.1). */
   const fileTree = { isAllCollapsed: allCollapsed, calls: [], setCollapseAll(v) { this.calls.push(v); this.isAllCollapsed = v; } };
+  /* `deferred`: a sidebar tab Obsidian has not loaded since start; its view has no tree until loadIfDeferred. */
   const makeLeaf = (autoReveal, { legacy = false } = {}) => ({
-    view: noTree ? {} : { tree: fileTree },
+    isDeferred: deferred,
+    view: (noTree || deferred) ? {} : { tree: fileTree },
+    async loadIfDeferred() { if (this.isDeferred) { this.isDeferred = false; this.view = { tree: fileTree }; } },
     getViewState: () => {
       const state = { sortOrder: 'alphabetical', showSearch: false, searchQuery: '' };
       /* Obsidian 1.5.0 to 1.8.2: the file explorer predates the setting and
@@ -1246,4 +1249,19 @@ test('the row is only hidden: under the class, in the file explorer, the header 
 
 test('nothing is written into the explorer\'s button row: the code never names it', () => {
   assert.doesNotMatch(source, /nav-buttons-container|nav-action-button|addNavButton/);
+});
+
+test('a file tree Obsidian had not loaded yet does what the icon said on the press that loads it', async () => {
+  /* Measured in the demo vault, 2026-11-23: the tab was deferred, the icon said Collapse, the tree loaded all folded,
+     and the press expanded. */
+  const { plugin, ribbons, fileTree, ready, commands } = loadPlugin({ deferred: true, allCollapsed: true });
+  await plugin.onload(); ready();
+  assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Collapse all folders', 'nothing to read yet: the icon offers Collapse');
+  await ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(fileTree.calls, [true], 'the press folded, as the icon said');
+  assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Expand all folders');
+  await commands.find((c) => c.id === 'collapse-all-folders').checkCallback(false);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(fileTree.calls, [true, false], 'from then on the tree\'s own state decides');
 });
