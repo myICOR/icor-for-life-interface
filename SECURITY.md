@@ -1,6 +1,6 @@
 # Security Policy
 
-ICOR for Life - Interface is a local-only Obsidian plugin. It makes no network requests and it
+ICOR Interface is a local-only Obsidian plugin. It makes no network requests and it
 stores no credentials. That means its security surface is small, and this file says
 so plainly rather than implying a risk the plugin does not carry. It still has a
 surface, and we would rather hear about a problem early than read about it later.
@@ -52,7 +52,7 @@ We are not going to publish a version-support table we would not honour.
 
 ## Scope: what this plugin actually touches
 
-ICOR for Life - Interface changes how the vault LOOKS and nothing else. Measured
+ICOR Interface changes how the vault LOOKS and nothing else. Measured
 against the shipped `main.js` of v0.1.0:
 
 - **No network access.** The bundle contains zero `fetch`, `requestUrl` and

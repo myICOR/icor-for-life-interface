@@ -7,6 +7,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## 0.10.4 (2026-11-23)
+
+- The display name is now ICOR Interface (it was ICOR for Life - Interface). The plugin id stays `icor-for-life-interface`, so installed vaults, settings and hotkeys carry on unchanged.
+
 ## 0.10.3 (2026-11-23)
 
 - 0.10.1 and 0.10.2 together: the directory pass and the ribbon coming back.

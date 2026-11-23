@@ -1,4 +1,4 @@
-/* ICOR for Life - Interface
+/* ICOR Interface
  *
  * The vault's chrome, in one place: which parts of Obsidian's own interface
  * are shown, and which folders carry a colour, an icon and a label.
@@ -540,7 +540,7 @@ class IcorInterfacePlugin extends Plugin {
       for (const k of FROM_OBJECTS) if (!(k in saved) && k in o) { this.settings[k] = o[k]; changed = true; }
       if (!PROPERTY_PLACES.includes(this.settings.properties)) this.settings.properties = 'top';
       if (changed) await this.saveData(this.settings);
-    } catch (e) { console.warn('ICOR for Life - Interface: the settings from Objects could not be read', e); }
+    } catch (e) { console.warn('ICOR Interface: the settings from Objects could not be read', e); }
   }
 
   /* Every ICOR for Life plugin keeps its launcher in Obsidian's ribbon (Tom, 2026-11-23), and nothing reroutes the
@@ -868,7 +868,7 @@ class IcorInterfacePlugin extends Plugin {
         schema = JSON.parse(await adapter.read(SCHEMA_PATH));
       }
     } catch (e) {
-      console.warn('ICOR for Life - Interface: _System/schema.json could not be read; using the built-in stage colours', e);
+      console.warn('ICOR Interface: _System/schema.json could not be read; using the built-in stage colours', e);
       schema = null;
     }
     this.stageMap = buildStageMap(schema);

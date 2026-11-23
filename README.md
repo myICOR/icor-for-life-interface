@@ -1,4 +1,4 @@
-# ICOR for Life - Interface
+# ICOR Interface
 
 **Decide what your vault shows you.**
 
