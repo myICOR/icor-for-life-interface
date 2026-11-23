@@ -221,11 +221,12 @@ function loadPlugin({
       iterateAllLeaves: () => {},
       getActiveFile: () => (activeFile ? { path: activeFile } : null),
     },
+    /* As Obsidian 1.15.1 does: executeCommandById is true for any command that exists, whether it ran or not. */
     commands: {
+      findCommand: (id) => (id === 'file-explorer:reveal-active-file' && revealWorks ? { id } : null),
       executeCommandById: (id) => {
-        if (id === 'file-explorer:reveal-active-file' && !(revealWorks && activeFile && leaf)) return false;
         ran.push(id);
-        return true;
+        return id !== 'file-explorer:reveal-active-file' || revealWorks;
       },
     },
     metadataCache: { on: () => ({}), getFileCache: () => null },
@@ -1236,6 +1237,12 @@ test('Show the open note runs Obsidian\'s own reveal command, and says why when 
   await none.plugin.onload(); none.ready();
   none.ribbons[1].cb();
   assert.match(none.notices.join(' '), /Open a note first/);
+  assert.deepEqual(none.ran, [], 'nothing runs without an open note (the host would answer true anyway)');
+  const off = loadPlugin({ revealWorks: false });
+  await off.plugin.onload(); off.ready();
+  off.ribbons[1].cb();
+  assert.match(off.notices.join(' '), /Core plugins, File explorer/);
+  assert.deepEqual(off.ran, []);
 });
 
 test('the row is only hidden: under the class, in the file explorer, the header (and the banner) stays', () => {

@@ -928,14 +928,20 @@ class IcorInterfacePlugin extends Plugin {
     else el.setAttribute('aria-label', label);
   }
 
+  /* Obsidian's executeCommandById answers true whenever the command exists, even when its own check said no (1.15.1),
+     so the two reasons it cannot run are asked first: no open note, or no File explorer to show it in. */
   revealActiveFile() {
-    const cmds = this.app.commands;
-    const ran = !!(cmds && typeof cmds.executeCommandById === 'function' && cmds.executeCommandById(REVEAL_COMMAND));
-    if (ran) return true;
     const ws = this.app.workspace;
     const file = ws && typeof ws.getActiveFile === 'function' ? ws.getActiveFile() : null;
-    new Notice(file ? 'The file tree is turned off: Settings, Core plugins, File explorer.' : 'Open a note first, then this shows it in the file tree.');
-    return false;
+    if (!file) { new Notice('Open a note first, then this shows it in the file tree.'); return false; }
+    const cmds = this.app.commands;
+    const known = cmds && typeof cmds.findCommand === 'function' ? !!cmds.findCommand(REVEAL_COMMAND) : true;
+    if (!known || !cmds || typeof cmds.executeCommandById !== 'function' || !this.fileExplorerLeaf()) {
+      new Notice('The file tree is turned off: Settings, Core plugins, File explorer.');
+      return false;
+    }
+    cmds.executeCommandById(REVEAL_COMMAND);
+    return true;
   }
 
   /* ------------------------------------------------------------ folders -- */
