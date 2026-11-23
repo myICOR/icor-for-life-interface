@@ -230,15 +230,6 @@ const row = (tree, path) => tree.querySelectorAll('.nav-folder-title').find((r) 
 
 /* --------------------------------------------------------------- chrome -- */
 
-test('a fresh ICOR vault starts with the ribbon hidden and the chrome reduced', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true });
-  await plugin.onload(); ready();
-  assert.ok(body.classSet.has('icor-hide-ribbon'), 'the ribbon is not hidden in a fresh ICOR vault');
-  assert.ok(body.classSet.has('icor-scaffold-chrome'), 'the chrome is not reduced in a fresh ICOR vault');
-  assert.ok(!body.classSet.has('icor-hide-banner'), 'the banner was hidden by default');
-  assert.ok(!body.classSet.has('icor-rooms-off'), 'the rooms were turned off by default');
-});
-
 test('a fresh vault that is not ICOR starts with nothing hidden', async () => {
   const { plugin, body, ready } = loadPlugin({ icor: false });
   await plugin.onload(); ready();
@@ -278,7 +269,7 @@ test('with Style Settings installed the plugin never touches the five classes', 
 });
 
 test('unload removes every class it set', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false, showBanner: false, roomIcons: false, handwriting: false } });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false, showBanner: false, roomIcons: false, handwriting: false, ribbonBack: true } });
   await plugin.onload(); ready();
   assert.equal(SWITCH_CLASSES.filter((c) => body.classSet.has(c)).length, 5, 'not every switch applied');
   plugin.onunload();
@@ -583,7 +574,7 @@ test('every switch reads as ON in a plain vault, and the body carries no theme c
 });
 
 test('settings saved by 0.5.x with the old negative keys migrate by inversion', async () => {
-  const { plugin, body, ready, savedData } = loadPlugin({ saved: { hideRibbon: true, reduceChrome: false, hideBanner: true, roomsOff: false, noHand: true, tocEnabled: true, tocDepth: 2 } });
+  const { plugin, body, ready, savedData } = loadPlugin({ saved: { ribbonBack: true, hideRibbon: true, reduceChrome: false, hideBanner: true, roomsOff: false, noHand: true, tocEnabled: true, tocDepth: 2 } });
   await plugin.onload(); ready();
   assert.equal(plugin.settings.showRibbon, false, 'hideRibbon:true did not become showRibbon:false');
   assert.equal(plugin.settings.showControls, true, 'reduceChrome:false did not become showControls:true');
@@ -1097,4 +1088,28 @@ test('when Obsidian\'s own switch says Hidden, the setting here says so too', as
   plugin.app.vault.setConfig = () => {};
   await plugin.onload(); ready();
   assert.equal(plugin.settings.properties, 'sidebar');
+});
+
+/* Tom, 2026-11-23: every ICOR for Life plugin keeps its launcher in Obsidian's ribbon now, so the ribbon is never hidden
+   for them, and a ribbon an earlier first run hid comes back, once. */
+test('a 2.x ICOR vault keeps the ribbon and the file controls on first run too', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.showRibbon, true, 'the launchers live in the ribbon, and it was hidden');
+  assert.equal(plugin.settings.showControls, true);
+  assert.ok(!body.classList.contains('icor-hide-ribbon'));
+});
+
+test('a ribbon an earlier version hid comes back once, and stays as the member sets it after', async () => {
+  const first = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false } });
+  await first.plugin.onload(); first.ready();
+  assert.equal(first.plugin.settings.showRibbon, true, 'the hidden ribbon did not come back');
+  assert.equal(first.savedData.value.ribbonBack, true, 'the return was not saved, so it would run again');
+  const later = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true } });
+  await later.plugin.onload(); later.ready();
+  assert.equal(later.plugin.settings.showRibbon, false, 'a ribbon the member hid afterwards came back again');
+});
+
+test('the switches no longer say the actions moved to the file-tree toolbar', () => {
+  assert.doesNotMatch(source, /routes every action it carried to the file-tree toolbar|reroutes all four and ships this off/);
 });

@@ -7,12 +7,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## 0.10.3 (2026-11-23)
+
+- 0.10.1 and 0.10.2 together: the directory pass and the ribbon coming back.
+
+## 0.10.2 (2026-11-23)
+
+- The ribbon stays. Every ICOR for Life plugin keeps its icon in Obsidian's ribbon now, so a first run no longer hides it (nor Obsidian's own file controls), in any vault. A ribbon an earlier version hid comes back once; whatever you set after that stays. The two switches no longer say the actions moved to the file-tree toolbar.
 ## 0.10.1 (2026-11-23)
 
 - Ready for the Obsidian community directory's review. Carries 0.8.1's ribbon fix into this line: the Left ribbon
   switch hides the ribbon on any theme, and says when INKLINE is not active.
 - The diagram viewer lifts Mermaid's width cap from the stylesheet instead of an inline style.
 - A shorter description, within the directory's 250 characters.
+
 
 ## 0.10.0 (2026-11-23)
 

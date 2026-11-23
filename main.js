@@ -73,12 +73,12 @@ const SWITCHES = [
   {
     key: 'showRibbon', cls: 'icor-hide-ribbon', on: 'absent',
     name: 'Left ribbon',
-    desc: 'The thin column of icons on the far left. ICOR for Life routes every action it carried to the file-tree toolbar, the top row or the command palette, so ICOR for Life ships this off.',
+    desc: 'The thin column of icons on the far left, where every ICOR for Life plugin keeps its icon. Right-click it to reorder or hide single icons.',
   },
   {
     key: 'showControls', cls: 'icor-scaffold-chrome', on: 'absent',
     name: "Obsidian's own file controls",
-    desc: 'The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order on the file-tree toolbar. ICOR for Life reroutes all four and ships this off.',
+    desc: 'The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order on the file-tree toolbar.',
   },
   {
     key: 'showBanner', cls: 'icor-hide-banner', on: 'absent',
@@ -271,6 +271,7 @@ const KINDS = [
 
 const DEFAULT_SETTINGS = {
   showRibbon: true,
+  ribbonBack: true,
   showControls: true,
   showBanner: true,
   roomIcons: true,
@@ -369,6 +370,13 @@ class IcorInterfacePlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, this.migrate(saved || {}));
     this.settings.folders = Array.isArray(this.settings.folders) ? this.settings.folders : [];
     if (saved === null || saved === undefined) this.applyFirstRunDefaults();
+    /* A ribbon an earlier first run hid (when the launchers sat in the file tree) comes back once: the launchers live
+       there now. Whatever the member sets after that stays. */
+    else if (!saved.ribbonBack) {
+      this.settings.showRibbon = true;
+      this.settings.ribbonBack = true;
+      await this.saveData(this.settings);
+    }
     if (!saved || FROM_OBJECTS.some((k) => !(k in saved))) await this.importFromObjects(saved || {});
     if (this.nativeProperties() === 'hidden' && this.settings.properties !== 'sidebar') this.settings.properties = 'sidebar';
     /* The stage map, once; again only when _System/schema.json changes. */
@@ -535,13 +543,10 @@ class IcorInterfacePlugin extends Plugin {
     } catch (e) { console.warn('ICOR for Life - Interface: the settings from Objects could not be read', e); }
   }
 
+  /* Every ICOR for Life plugin keeps its launcher in Obsidian's ribbon (Tom, 2026-11-23), and nothing reroutes the
+     file controls any more: a first run hides neither, in any vault. */
   applyFirstRunDefaults() {
     if (!this.isIcorVault()) return;
-    /* ICOR for Life 3.0 (it has _System/schema.json) keeps Obsidian's ribbon and file controls: its README sends a
-       new member to the ribbon, and nothing reroutes the file controls any more. */
-    if (typeof this.app.vault.getAbstractFileByPath === 'function' && this.app.vault.getAbstractFileByPath('_System/schema.json')) { this.firstRunApplied = true; return; }
-    this.settings.showRibbon = false;
-    this.settings.showControls = false;
     this.firstRunApplied = true;
   }
 
