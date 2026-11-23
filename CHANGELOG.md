@@ -7,6 +7,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.6.3 are described by their tags and release notes on
 GitHub; this file starts with 0.6.3.
 
+## 0.10.1 (2026-11-23)
+
+- Ready for the Obsidian community directory's review. Carries 0.8.1's ribbon fix into this line: the Left ribbon
+  switch hides the ribbon on any theme, and says when INKLINE is not active.
+- The diagram viewer lifts Mermaid's width cap from the stylesheet instead of an inline style.
+- A shorter description, within the directory's 250 characters.
 
 ## 0.10.0 (2026-11-23)
 
@@ -39,6 +45,19 @@ GitHub; this file starts with 0.6.3.
 - Commands: switch the look, show or hide _System, show the note's properties in the right sidebar.
 - ICOR for Life 3.0 rooms: no 03 WiP, 06 is the Outer World; a 3.0 vault keeps Obsidian's ribbon and file controls on
   first run.
+
+## [0.8.1] - 2026-11-02
+
+### Fixed
+- **The Left ribbon switch hides the ribbon on any theme.** The switch only
+  set the `icor-hide-ribbon` class, and the one rule that reads the class is
+  in the INKLINE theme, so with INKLINE inactive or out of date the ribbon
+  stayed. The plugin's `styles.css` now carries the same rule, plus INKLINE's
+  macOS title bar inset, under the same class. Turning the switch back on or
+  disabling the plugin brings the ribbon back. With Style Settings enabled,
+  the switch is still its to own.
+- **The switch says when INKLINE is not active.** While the ribbon is hidden
+  on another theme, the setting's description says so. There is no pop-up.
 
 ## [0.8.0] - 2026-09-21
 
