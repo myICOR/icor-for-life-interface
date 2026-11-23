@@ -42,11 +42,12 @@
  * plugin serialises it into the `url("data:image/svg+xml,...")` the theme
  * masks with. No icon set is bundled.
  *
- * Four things carry their own small stylesheet because they must work on
+ * Five things carry their own small stylesheet because they must work on
  * any theme: the Outline depth rules, the diagram viewer, the collapsible
  * status bar (one body class, one item in the bar, one round button at the
- * bottom right of the main window, where the bar itself lives), and the left
- * ribbon. The ribbon's is a fallback and nothing more: the two rules INKLINE
+ * bottom right of the main window, where the bar itself lives), the file
+ * explorer's button row (0.11.0: hidden under one body class, its two useful
+ * buttons in the left ribbon instead), and the left ribbon. The ribbon's is a fallback and nothing more: the two rules INKLINE
  * already has, under the same `icor-hide-ribbon` class, so the switch still
  * does what it says on another theme. No other switch has CSS here.
  *
@@ -57,7 +58,7 @@
 
 const {
   Plugin, PluginSettingTab, Setting, FuzzySuggestModal, AbstractInputSuggest, Modal,
-  getIcon, getIconIds, setIcon, Notice, TFolder, Platform,
+  getIcon, getIconIds, setIcon, setTooltip, Notice, TFolder, Platform,
 } = require('obsidian');
 
 /* --------------------------------------------------------------- switches --
@@ -78,7 +79,7 @@ const SWITCHES = [
   {
     key: 'showControls', cls: 'icor-scaffold-chrome', on: 'absent',
     name: "Obsidian's own file controls",
-    desc: 'The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order on the file-tree toolbar.',
+    desc: "The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order in the file explorer's button row, while that row is shown.",
   },
   {
     key: 'showBanner', cls: 'icor-hide-banner', on: 'absent',
@@ -294,6 +295,9 @@ const DEFAULT_SETTINGS = {
   look: 'gradient',
   /* _System (schema, templates, skills, tools) in the file tree; hidden by default, it is still there */
   showSystem: false,
+  /* the file explorer's own button row (New note, New folder, sort, auto-reveal, collapse); hidden by default, with
+     Collapse all and Show the open note in the left ribbon instead (Tom, 2026-11-23) */
+  showExplorerButtons: false,
   /* where a note's properties show: 'top' (Obsidian's way), 'collapsed' (on top, folded), 'bottom' (under the note),
      'sidebar' (hidden in notes: Obsidian's own Properties in document: Hidden, and its File properties panel) */
   properties: 'top',
@@ -308,6 +312,20 @@ const PROPS_BOTTOM_CLASS = 'icor-props-bottom';
 const PROPS_FOLD_CLASS = 'icor-props-folding';
 
 const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
+
+/* The file explorer's button row (0.11.0, Tom 2026-11-23). One body class hides the row (styles.css, any theme); this
+   file never names or touches the row itself, so taking the class off gives Obsidian's row back exactly as it was.
+   Its two buttons worth having move to the left ribbon, where members reorder or hide them under Settings,
+   Appearance, Ribbon menu like any plugin's icon: Collapse all (a toggle, like the host's own button) and reveal the
+   open note, which runs Obsidian's own command. */
+const EXPLORER_BUTTONS_CLASS = 'icor-hide-explorer-buttons';
+const REVEAL_COMMAND = 'file-explorer:reveal-active-file';
+const REVEAL_ICON = 'navigation';
+const REVEAL_LABEL = 'Show the open note in the file tree';
+const COLLAPSE_ICON = 'chevrons-down-up';
+const EXPAND_ICON = 'chevrons-up-down';
+const COLLAPSE_LABEL = 'Collapse all folders';
+const EXPAND_LABEL = 'Expand all folders';
 
 /* The collapsible status bar. The two body classes are what styles.css
    guards on: the fold, and the hover reveal of the round button. The three
@@ -415,6 +433,22 @@ class IcorInterfacePlugin extends Plugin {
       },
     });
 
+    /* The file explorer's two buttons, in the ribbon. The ribbon item keeps the name it was added with (that is what
+       the Ribbon menu lists); only its icon and tooltip follow the tree, the way the host's own button does. */
+    this.collapseRibbonEl = this.addRibbonIcon(COLLAPSE_ICON, COLLAPSE_LABEL, () => { void this.toggleCollapseAll(); });
+    this.addRibbonIcon(REVEAL_ICON, REVEAL_LABEL, () => this.revealActiveFile());
+    /* Reveal has its command already: Obsidian's own, "Reveal current file in navigation". Collapse has none in the
+       host, so it gets one here; it withdraws when there is no tree to fold. */
+    this.addCommand({
+      id: 'collapse-all-folders',
+      name: 'Collapse or expand all folders in the file tree',
+      checkCallback: (checking) => {
+        if (!this.fileExplorerLeaf()) return false;
+        if (!checking) void this.toggleCollapseAll();
+        return true;
+      },
+    });
+
     this.addCommand({
       id: 'toggle-look', name: 'Switch the look between flat and gradient',
       callback: async () => { this.settings.look = this.settings.look === 'flat' ? 'gradient' : 'flat'; await this.saveSettings(); },
@@ -454,6 +488,7 @@ class IcorInterfacePlugin extends Plugin {
 
     this.app.workspace.onLayoutReady(() => {
       this.applyChrome();
+      this.syncCollapseRibbon();
       this.foldProperties();
       this.applyFolders();
       this.observeExplorer();
@@ -490,7 +525,7 @@ class IcorInterfacePlugin extends Plugin {
        classes, and every row it claimed. Left behind, the theme would keep
        rendering a configuration nobody can edit any more. */
     for (const s of SWITCHES) document.body.classList.remove(s.cls);
-    document.body.classList.remove(...Object.values(LOOK_CLASSES), HIDE_SYSTEM_CLASS, PROPS_BOTTOM_CLASS, PROPS_FOLD_CLASS);
+    document.body.classList.remove(...Object.values(LOOK_CLASSES), HIDE_SYSTEM_CLASS, PROPS_BOTTOM_CLASS, PROPS_FOLD_CLASS, EXPLORER_BUTTONS_CLASS);
     this.applyOutline(0);
     this.teardownStatusBar();
     for (const row of document.querySelectorAll(`[${MANAGED}]`)) this.releaseRow(row);
@@ -583,6 +618,8 @@ class IcorInterfacePlugin extends Plugin {
     this.applyOutline(this.settings.outlineDepth);
     this.applyStatusBar();
     this.applyNotes();
+    /* Not a theme class: this plugin's, whoever owns the five switches below. */
+    document.body.classList.toggle(EXPLORER_BUTTONS_CLASS, !this.settings.showExplorerButtons);
     if (this.styleSettingsActive()) return;
     for (const s of SWITCHES) {
       const on = !!this.settings[s.key];
@@ -834,6 +871,59 @@ class IcorInterfacePlugin extends Plugin {
     if (next === null) return null;
     new Notice(`Auto-reveal current file is ${next ? 'ON' : 'OFF'}`);
     return next;
+  }
+
+  /* ------------------------------------------------ the explorer's buttons --
+   * Collapse all is the file tree's own toggle: `tree.setCollapseAll()`, the
+   * method the host's button calls (Obsidian 1.15.1 bundle, 2026-11-23), so the
+   * folds are saved and the host's button, when shown, flips with it. Not in
+   * obsidian.d.ts, so it is probed, never assumed; a sidebar Obsidian has not
+   * loaded yet (a deferred view) is loaded first. Reveal is Obsidian's own
+   * command, run by id. Neither touches the row. */
+  async explorerTree() {
+    const leaf = this.fileExplorerLeaf();
+    if (!leaf) return null;
+    if (leaf.isDeferred && typeof leaf.loadIfDeferred === 'function') await leaf.loadIfDeferred();
+    const tree = leaf.view && leaf.view.tree;
+    return tree && typeof tree.setCollapseAll === 'function' ? tree : null;
+  }
+
+  async toggleCollapseAll() {
+    const tree = await this.explorerTree();
+    if (!tree) {
+      new Notice(this.fileExplorerLeaf()
+        ? "This Obsidian's file tree cannot be folded from here. Turn on Obsidian's file explorer buttons in ICOR Interface's settings and use its own button."
+        : 'The file tree is turned off: Settings, Core plugins, File explorer.');
+      return null;
+    }
+    tree.setCollapseAll(!tree.isAllCollapsed);
+    this.syncCollapseRibbon(tree);
+    return !!tree.isAllCollapsed;
+  }
+
+  /* The ribbon icon says what a press will do, as the host's button does: all folded, it offers to expand. */
+  syncCollapseRibbon(tree) {
+    const el = this.collapseRibbonEl;
+    if (!el) return;
+    if (tree === undefined) {
+      const leaf = this.fileExplorerLeaf();
+      tree = leaf && leaf.view && leaf.view.tree;
+    }
+    const folded = !!(tree && tree.isAllCollapsed);
+    setIcon(el, folded ? EXPAND_ICON : COLLAPSE_ICON);
+    const label = folded ? EXPAND_LABEL : COLLAPSE_LABEL;
+    if (typeof setTooltip === 'function') setTooltip(el, label);
+    else el.setAttribute('aria-label', label);
+  }
+
+  revealActiveFile() {
+    const cmds = this.app.commands;
+    const ran = !!(cmds && typeof cmds.executeCommandById === 'function' && cmds.executeCommandById(REVEAL_COMMAND));
+    if (ran) return true;
+    const ws = this.app.workspace;
+    const file = ws && typeof ws.getActiveFile === 'function' ? ws.getActiveFile() : null;
+    new Notice(file ? 'The file tree is turned off: Settings, Core plugins, File explorer.' : 'Open a note first, then this shows it in the file tree.');
+    return false;
   }
 
   /* ------------------------------------------------------------ folders -- */
@@ -1364,6 +1454,16 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         this.renderSwitch(containerEl, s);
       }
     }
+
+    new Setting(containerEl)
+      .setName("Show Obsidian's file explorer buttons")
+      .setDesc('The row of buttons above the file tree: new note, new folder, sort order, auto-reveal and collapse all. Hidden by default: collapsing all folders and showing the open note in the file tree are icons in the left ribbon, and a new note or folder is in the file tree\'s right-click menu.')
+      .addToggle((t) => t
+        .setValue(!!this.plugin.settings.showExplorerButtons)
+        .onChange(async (v) => {
+          this.plugin.settings.showExplorerButtons = v;
+          await this.plugin.saveSettings();
+        }));
 
     this.renderAutoReveal(containerEl);
 

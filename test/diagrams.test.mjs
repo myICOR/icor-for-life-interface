@@ -37,6 +37,7 @@ function loadPlugin({ saved = {} } = {}) {
       registerMarkdownPostProcessor(fn) { hooks.postProcessors.push(fn); }
       registerDomEvent(el, type, fn) { hooks.domEvents.push({ type, fn }); }
       addCommand() {}
+      addRibbonIcon() { return new FakeEl('div'); }
       addStatusBarItem() { return body.createDiv({ cls: 'status-bar-item' }); }
     },
     PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },

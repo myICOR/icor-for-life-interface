@@ -1,8 +1,9 @@
 /* ICOR for Life - Interface.
    The chrome switches and the folder rows are drawn by the INKLINE theme.
-   This file carries the four things that must work on any theme: a fallback
-   for the ribbon switch, the Outline depth rules, the diagram viewer and the
-   collapsible status bar, plus the settings tab's own controls. */
+   This file carries the five things that must work on any theme: a fallback
+   for the ribbon switch, the file explorer's button row, the Outline depth
+   rules, the diagram viewer and the collapsible status bar, plus the settings
+   tab's own controls. */
 
 /* ----------------------------------------------------------- ribbon hiding --
    INKLINE's own two rules for the `icor-hide-ribbon` switch, repeated so the
@@ -17,6 +18,19 @@ body.icor-hide-ribbon .workspace-ribbon.mod-left {
    without this the sidebar toggle slides under the macOS window buttons. */
 body.mod-macos.is-frameless:not(.is-fullscreen).icor-hide-ribbon {
   --frame-left-space: 80px;
+}
+
+/* ------------------------------------------- the file explorer's buttons --
+   0.11.0 (Tom, 2026-11-23): the row of buttons above the file tree is hidden
+   while the plugin sets `icor-hide-explorer-buttons` (Settings, ICOR
+   Interface, "Show Obsidian's file explorer buttons", off by default). Only
+   the row goes: the header above it, where INKLINE paints the banner, stays.
+   Nothing is written into the row and nothing is moved out of it, so taking
+   the class off (the setting, or turning the plugin off) is Obsidian's row
+   exactly as it was. Collapse all and reveal-the-open-note are in the left
+   ribbon instead. */
+body.icor-hide-explorer-buttons .workspace-leaf-content[data-type="file-explorer"] .nav-header > .nav-buttons-container {
+  display: none;
 }
 
 .icor-if-icon-suggestion {

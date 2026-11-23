@@ -32,6 +32,7 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
 function loadPlugin({
   saved = null, icor = true, styleSettings = false, folders = null,
   explorerLeaf = undefined, schema = undefined, leftRibbon = undefined, theme = undefined, customTheme = undefined,
+  allCollapsed = false, noTree = false, activeFile = 'Notes/a.md', revealWorks = true,
 } = {}) {
   const body = new FakeEl('body');
   /* The host's status bar, with one core item in it, exists before any
@@ -71,6 +72,9 @@ function loadPlugin({
   /* Every Setting the tab builds, with its toggle's live value and its
      onChange, so a gate can read what the tab SHOWED and drive what it does. */
   const settings = [];
+  /* Every ribbon icon the plugin adds, and every command it runs by id. */
+  const ribbons = [];
+  const ran = [];
   const obsidian = {
     Plugin: class {
       constructor(app, manifest) { this.app = app; this.manifest = manifest; }
@@ -81,6 +85,12 @@ function loadPlugin({
       registerMarkdownPostProcessor() {}
       registerDomEvent() {}
       addCommand(c) { commands.push(c); }
+      addRibbonIcon(icon, title, cb) {
+        const el = body.createDiv({ cls: 'side-dock-ribbon-action', attr: { 'aria-label': title } });
+        el.attrs['data-icon'] = icon;
+        ribbons.push({ icon, title, cb, el });
+        return el;
+      }
       /* the host appends a fresh item at the end of the bar */
       addStatusBarItem() { return statusBar.createDiv({ cls: 'status-bar-item plugin-icor-for-life-interface' }); }
     },
@@ -132,6 +142,7 @@ function loadPlugin({
     Platform: { isMobile: false, isDesktop: true },
     TFolder,
     setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
+    setTooltip: (el, text) => { el.attrs['aria-label'] = String(text); },
     getIconIds: () => ['lucide-folder', 'lucide-sprout', 'lucide-bot'],
     getIcon: (id) => ({
       cloneNode: () => ({
@@ -163,7 +174,10 @@ function loadPlugin({
      `explorerLeaf: null` is a vault whose core File explorer is turned off. */
   const leafCalls = [];
   const saveLayoutCalls = { n: 0 };
+  /* The file tree the explorer view holds, with the host's own collapse-all toggle (Obsidian 1.15.1). */
+  const fileTree = { isAllCollapsed: allCollapsed, calls: [], setCollapseAll(v) { this.calls.push(v); this.isAllCollapsed = v; } };
   const makeLeaf = (autoReveal, { legacy = false } = {}) => ({
+    view: noTree ? {} : { tree: fileTree },
     getViewState: () => {
       const state = { sortOrder: 'alphabetical', showSearch: false, searchQuery: '' };
       /* Obsidian 1.5.0 to 1.8.2: the file explorer predates the setting and
@@ -202,6 +216,14 @@ function loadPlugin({
       getLeavesOfType: (t) => ((t === 'file-explorer' && leaf) ? [leaf] : []),
       requestSaveLayout: () => { saveLayoutCalls.n += 1; },
       iterateAllLeaves: () => {},
+      getActiveFile: () => (activeFile ? { path: activeFile } : null),
+    },
+    commands: {
+      executeCommandById: (id) => {
+        if (id === 'file-explorer:reveal-active-file' && !(revealWorks && activeFile && leaf)) return false;
+        ran.push(id);
+        return true;
+      },
     },
     metadataCache: { on: () => ({}), getFileCache: () => null },
     plugins: { enabledPlugins: new Set(styleSettings ? ['obsidian-style-settings'] : []) },
@@ -219,7 +241,7 @@ function loadPlugin({
   };
   return {
     plugin, body, explorer, tree, statusBar, commands, buildRows, savedData,
-    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings,
+    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings, ribbons, ran, fileTree,
     ready: () => layoutReady.forEach((f) => f()),
   };
 }
@@ -1113,4 +1135,115 @@ test('a ribbon an earlier version hid comes back once, and stays as the member s
 
 test('the switches no longer say the actions moved to the file-tree toolbar', () => {
   assert.doesNotMatch(source, /routes every action it carried to the file-tree toolbar|reroutes all four and ships this off/);
+});
+
+/* ------------------------------------------ the file explorer's buttons --
+ * 0.11.0 (Tom, 2026-11-23): the explorer's button row hidden by default, one
+ * body class, CSS in styles.css; Collapse all and reveal-the-open-note in the
+ * left ribbon; a setting brings the row back. */
+const EXPLORER_CLASS = 'icor-hide-explorer-buttons';
+const explorerRow = (open) => open().find((s) => s.name === "Show Obsidian's file explorer buttons");
+
+test('the explorer\'s button row is hidden by default, in any vault', async () => {
+  for (const icor of [true, false]) {
+    const { plugin, body, ready } = loadPlugin({ icor });
+    await plugin.onload(); ready();
+    assert.ok(body.classSet.has(EXPLORER_CLASS), `icor=${icor}: the row was not hidden`);
+  }
+});
+
+test('the setting brings Obsidian\'s row back and hides it again; unload gives it back', async () => {
+  const { plugin, body, ready, openSettings, savedData } = loadPlugin({ saved: { ribbonBack: true } });
+  await plugin.onload(); ready();
+  const row = explorerRow(openSettings);
+  assert.ok(row && row.toggle, 'no setting for the row');
+  assert.equal(row.toggle.value, false, 'the setting is off by default');
+  assert.match(row.desc, /left ribbon/);
+  await row.toggle.cb(true);
+  assert.ok(!body.classSet.has(EXPLORER_CLASS), 'turning it on did not bring the row back');
+  assert.equal(savedData.value.showExplorerButtons, true);
+  await explorerRow(openSettings).toggle.cb(false);
+  assert.ok(body.classSet.has(EXPLORER_CLASS));
+  plugin.onunload();
+  assert.ok(!body.classSet.has(EXPLORER_CLASS), 'unload left the row hidden');
+});
+
+test('a saved choice to show the row is kept, and Style Settings does not take the class over', async () => {
+  const shown = loadPlugin({ saved: { ribbonBack: true, showExplorerButtons: true } });
+  await shown.plugin.onload(); shown.ready();
+  assert.ok(!shown.body.classSet.has(EXPLORER_CLASS));
+  const ss = loadPlugin({ styleSettings: true });
+  await ss.plugin.onload(); ss.ready();
+  assert.ok(ss.body.classSet.has(EXPLORER_CLASS), 'the class is this plugin\'s, not one of the five theme switches');
+});
+
+test('two ribbon icons, each with a tooltip that says what it does', async () => {
+  const { plugin, ribbons, ready } = loadPlugin();
+  await plugin.onload(); ready();
+  const titles = ribbons.map((r) => r.title);
+  assert.deepEqual(titles, ['Collapse all folders', 'Show the open note in the file tree']);
+  for (const r of ribbons) assert.match(r.title, /^[A-Z][a-z]/);
+});
+
+test('Collapse all folds the tree with the host\'s own toggle, and the icon then offers to expand', async () => {
+  const { plugin, ribbons, fileTree, ready } = loadPlugin();
+  await plugin.onload(); ready();
+  const [collapse] = ribbons;
+  await collapse.cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(fileTree.calls, [true]);
+  assert.equal(collapse.el.getAttribute('aria-label'), 'Expand all folders');
+  assert.equal(collapse.el.attrs['data-icon'], 'chevrons-up-down');
+  await collapse.cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(fileTree.calls, [true, false]);
+  assert.equal(collapse.el.getAttribute('aria-label'), 'Collapse all folders');
+  assert.equal(collapse.el.attrs['data-icon'], 'chevrons-down-up');
+});
+
+test('a tree that starts folded shows Expand on load', async () => {
+  const { plugin, ribbons, ready } = loadPlugin({ allCollapsed: true });
+  await plugin.onload(); ready();
+  assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Expand all folders');
+});
+
+test('the collapse command withdraws without a file tree, and a tree that cannot fold says what to do', async () => {
+  const off = loadPlugin({ explorerLeaf: null });
+  await off.plugin.onload(); off.ready();
+  const cmd = off.commands.find((c) => c.id === 'collapse-all-folders');
+  assert.ok(cmd, 'no collapse command');
+  assert.equal(cmd.checkCallback(true), false);
+  await off.ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.match(off.notices.join(' '), /Core plugins, File explorer/);
+  const old = loadPlugin({ noTree: true });
+  await old.plugin.onload(); old.ready();
+  await old.ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.match(old.notices.join(' '), /Show Obsidian's file explorer buttons|file explorer buttons/);
+});
+
+test('Show the open note runs Obsidian\'s own reveal command, and says why when it cannot', async () => {
+  const ok = loadPlugin();
+  await ok.plugin.onload(); ok.ready();
+  ok.ribbons[1].cb();
+  assert.deepEqual(ok.ran, ['file-explorer:reveal-active-file']);
+  assert.deepEqual(ok.notices, []);
+  const none = loadPlugin({ activeFile: null });
+  await none.plugin.onload(); none.ready();
+  none.ribbons[1].cb();
+  assert.match(none.notices.join(' '), /Open a note first/);
+});
+
+test('the row is only hidden: under the class, in the file explorer, the header (and the banner) stays', () => {
+  const css = readFileSync(resolve(repo, 'styles.css'), 'utf8');
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, sel]) => /nav-buttons-container|nav-header/.test(sel));
+  assert.equal(rules.length, 1, 'one rule, no more');
+  const [, sel, decl] = rules[0];
+  assert.equal(sel.trim().split('\n').pop().trim(), 'body.icor-hide-explorer-buttons .workspace-leaf-content[data-type="file-explorer"] .nav-header > .nav-buttons-container');
+  assert.match(decl, /^\s*display:\s*none;\s*$/);
+});
+
+test('nothing is written into the explorer\'s button row: the code never names it', () => {
+  assert.doesNotMatch(source, /nav-buttons-container|nav-action-button|addNavButton/);
 });

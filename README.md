@@ -25,14 +25,21 @@ theme first. The theme draws the chrome and the folders; this plugin owns the
 settings the theme reads. Without it, several switches will move and change
 nothing.
 
-Three things work on any theme: the Outline depth control, the diagram
-viewer, and the collapsible status bar.
+Four things work on any theme: the file explorer's buttons, the Outline depth
+control, the diagram viewer, and the collapsible status bar.
 
 ## What you can turn on and off
 
 **Obsidian's chrome.** The left ribbon. Obsidian's own file controls, meaning
 the vault switcher and the New note, New folder and sort buttons. The ICOR for
 Life banner. Folder icons and colours. The handwritten layer.
+
+**The file explorer's buttons.** The row of buttons above the file tree is
+hidden by default. Its two most useful buttons are in the left ribbon instead:
+Collapse all folders (press again to expand them) and Show the open note in
+the file tree. Move or hide them under Settings, Appearance, Ribbon menu. New
+note and New folder are in the file tree's right-click menu. To get
+Obsidian's own row back, turn on "Show Obsidian's file explorer buttons".
 
 **Your folders, by ICOR stage.** Each stage colours its folders: Input (blue)
 00 Daily Notes and 01 Inbox; Control (green) 02 Inner World, 03 Outer World,
