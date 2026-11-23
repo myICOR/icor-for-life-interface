@@ -596,7 +596,7 @@ const ribbonRow = (open) => open().find((s) => s.name === 'Left ribbon');
 
 test('the ribbon class is set even on a host whose ribbon has a toggle, and the toggle is never called', async () => {
   const calls = [];
-  const { plugin, body, ready } = loadPlugin({ icor: true, leftRibbon: { toggle: (v) => calls.push(v) } });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true }, leftRibbon: { toggle: (v) => calls.push(v) } });
   await plugin.onload(); ready();
   assert.ok(body.classSet.has('icor-hide-ribbon'), 'the class is what the theme and the fallback rule read');
   plugin.settings.showRibbon = true;
@@ -606,7 +606,7 @@ test('the ribbon class is set even on a host whose ribbon has a toggle, and the 
 });
 
 test('turning the switch back on and unloading both bring the ribbon back', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true } });
   await plugin.onload(); ready();
   assert.ok(body.classSet.has('icor-hide-ribbon'));
   plugin.settings.showRibbon = true;
@@ -640,7 +640,8 @@ test('the ribbon hint shows when the ribbon is hidden on another theme, and only
     [{}, false],
     [{ theme: 42 }, false],
   ]) {
-    const { plugin, openSettings, ready } = loadPlugin({ icor: true, ...opts });
+    /* A member who switched the ribbon off (0.10.2: a first run no longer does). */
+    const { plugin, openSettings, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true }, ...opts });
     await plugin.onload(); ready();
     const { desc } = ribbonRow(openSettings);
     assert.equal(desc.includes('INKLINE is not the active theme'), shown, JSON.stringify(opts));
@@ -649,7 +650,7 @@ test('the ribbon hint shows when the ribbon is hidden on another theme, and only
 });
 
 test('the ribbon hint follows the switch and raises no notice', async () => {
-  const { plugin, openSettings, notices, ready } = loadPlugin({ icor: true, theme: 'Minimal' });
+  const { plugin, openSettings, notices, ready } = loadPlugin({ icor: true, theme: 'Minimal', saved: { showRibbon: false, ribbonBack: true } });
   await plugin.onload(); ready();
   const row = ribbonRow(openSettings);
   assert.match(row.desc, /INKLINE is not the active theme/);
@@ -661,7 +662,7 @@ test('the ribbon hint follows the switch and raises no notice', async () => {
 });
 
 test('with Style Settings on, this plugin still leaves the ribbon class alone', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true, styleSettings: true, theme: 'Minimal' });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true }, styleSettings: true, theme: 'Minimal' });
   await plugin.onload(); ready();
   assert.ok(!body.classSet.has('icor-hide-ribbon'));
 });
