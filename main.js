@@ -1,4 +1,4 @@
-/* ICOR for Life - Interface
+/* ICOR Interface
  *
  * The vault's chrome, in one place: which parts of Obsidian's own interface
  * are shown, and which folders carry a colour, an icon and a label.
@@ -7,7 +7,7 @@
  * of DATA the theme reads:
  *
  *   1. Five classes on <body>, one per switch. INKLINE guards the ribbon, the
- *      reduced chrome, the banner, the room icons and the handwritten layer
+ *      reduced chrome, the banner, the folder icons and the handwritten layer
  *      on exactly these names, so the switches here are the same switches
  *      Style Settings would show - in plain words, with no second plugin.
  *
@@ -18,22 +18,36 @@
  *      outright, by the ordinary cascade: inline beats stylesheet, and
  *      nothing here needs `!important` or a copy of the theme's rules.
  *
- * THE DEFAULTS ARE NOT HERE. The eight ICOR rooms and their subfolders are
- * styled by the theme with no help from this plugin, and this plugin holds
- * only what the user CHANGED. Copying the theme's defaults into a second
- * file would make two places that have to agree, and the copy that gets
- * edited is never the copy that renders.
+ * THE ICOR STAGES (0.10.0, the ICOR stages contract, Tom 2026-11-23). The
+ * top folders are grouped by ICOR stage, and each stage has one colour:
+ * Input 00 Daily Notes, 01 Inbox; Control 02 Inner World, 03 Outer World,
+ * 04 Assets, 05 Databases; Output 06 Planner; Refine has no folder. Which
+ * folder is in which stage, and the stage's colour, come from the vault's
+ * _System/schema.json (`stages`), read once on load and again when the file
+ * changes. A schema without `stages` (an older vault's, which still says
+ * `rooms`) falls back to BUILTIN_STAGES, the same map. Nothing here is
+ * written per folder: a folder's colour is its stage's, its paper colour is
+ * derived from that (paperTone), its label is its name minus the number, and
+ * only its icon is looked up by name. Folders match by FULL NAME, never by
+ * the number in front: a migrated 2.x vault may still hold "06 AI Team",
+ * which is not the Output stage's "06 Planner".
+ *
+ * The theme still colours the same folders on its own when this plugin is
+ * not installed (its fallback, rows with no data-icor-kind). With the plugin,
+ * the stage folders are claimed here, so the schema decides. What the member
+ * CHANGED is the only thing stored, and it wins over the stage colour.
  *
  * Icons come from Obsidian itself: `getIconIds()` lists the ~1,700 Lucide
  * glyphs the app already ships, `getIcon()` hands over the SVG, and this
  * plugin serialises it into the `url("data:image/svg+xml,...")` the theme
  * masks with. No icon set is bundled.
  *
- * Four things carry their own small stylesheet because they must work on
+ * Five things carry their own small stylesheet because they must work on
  * any theme: the Outline depth rules, the diagram viewer, the collapsible
  * status bar (one body class, one item in the bar, one round button at the
- * bottom right of the main window, where the bar itself lives), and the left
- * ribbon. The ribbon's is a fallback and nothing more: the two rules INKLINE
+ * bottom right of the main window, where the bar itself lives), the file
+ * explorer's button row (0.11.0: hidden under one body class, its two useful
+ * buttons in the left ribbon instead), and the left ribbon. The ribbon's is a fallback and nothing more: the two rules INKLINE
  * already has, under the same `icor-hide-ribbon` class, so the switch still
  * does what it says on another theme. No other switch has CSS here.
  *
@@ -44,7 +58,7 @@
 
 const {
   Plugin, PluginSettingTab, Setting, FuzzySuggestModal, AbstractInputSuggest, Modal,
-  getIcon, getIconIds, setIcon, Notice, TFolder, Platform,
+  getIcon, getIconIds, setIcon, setTooltip, Notice, TFolder, Platform,
 } = require('obsidian');
 
 /* --------------------------------------------------------------- switches --
@@ -60,12 +74,12 @@ const SWITCHES = [
   {
     key: 'showRibbon', cls: 'icor-hide-ribbon', on: 'absent',
     name: 'Left ribbon',
-    desc: 'The thin column of icons on the far left. ICOR for Life routes every action it carried to the file-tree toolbar, the top row or the command palette, so the scaffold ships this off.',
+    desc: 'The thin column of icons on the far left, where every ICOR for Life plugin keeps its icon. Right-click it to reorder or hide single icons.',
   },
   {
     key: 'showControls', cls: 'icor-scaffold-chrome', on: 'absent',
     name: "Obsidian's own file controls",
-    desc: 'The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order on the file-tree toolbar. The scaffold reroutes all four and ships this off.',
+    desc: "The vault switcher at the bottom of the sidebar, and New note, New folder and Change sort order in the file explorer's button row, while that row is shown.",
   },
   {
     key: 'showBanner', cls: 'icor-hide-banner', on: 'absent',
@@ -74,8 +88,8 @@ const SWITCHES = [
   },
   {
     key: 'roomIcons', cls: 'icor-rooms-off', on: 'absent',
-    name: 'Room icons and colours',
-    desc: "Folders carry an icon and a colour. Off, every folder has Obsidian's default look, including any you configured below.",
+    name: 'Folder icons and colours',
+    desc: "Folders carry an icon and a colour: each ICOR stage its own (Input, Control, Output), and any folder you give one below. Off, every folder has Obsidian's default look.",
   },
   {
     key: 'handwriting', cls: 'inkline-no-hand', on: 'absent',
@@ -94,76 +108,171 @@ const LEGACY_KEYS = {
   noHand: 'handwriting',
 };
 
-/* INKLINE's eight room hues, ink and paper. Offered as a palette so a folder
- * can join the family in one pick; the colour picker beside it takes anything
- * else. These are the theme's own values, kept here as a convenience and
- * never as the source: the theme renders its rooms without reading this. */
+/* INKLINE's calmed hues, ink and paper, offered beside the stage colours
+ * (palette(), below) so a folder can take one in a single pick; the colour
+ * picker beside it takes anything else. The data key `room` in KINDS and the
+ * `--room-*` properties keep their names: they are what saved settings and
+ * the theme read. */
 const PALETTE = [
-  { key: 'yellow',     name: 'Yellow (Daily Scratchpad)', ink: '#c2a35c', paper: '#7f662f' },
-  { key: 'terracotta', name: 'Terracotta (Inbox)',        ink: '#c2765a', paper: '#9e4526' },
-  { key: 'marker',     name: 'Marker (Planner)',          ink: '#ff5a2d', paper: '#b3401f' },
-  { key: 'cyan',       name: 'Cyan (WiP)',                ink: '#7a99a1', paper: '#4e6b73' },
-  { key: 'success',    name: 'Green (Inner World)',       ink: '#7d9a7f', paper: '#5e7a60' },
-  { key: 'burgundy',   name: 'Burgundy (Assets)',         ink: '#a87795', paper: '#7c5570' },
-  { key: 'indigo',     name: 'Indigo (AI Team)',          ink: '#8087a6', paper: '#565e7e' },
-  { key: 'rose',       name: 'Rose (Databases)',          ink: '#b57a86', paper: '#8f5560' },
+  { key: 'yellow',     name: 'Yellow',     ink: '#c2a35c', paper: '#7f662f' },
+  { key: 'terracotta', name: 'Terracotta', ink: '#c2765a', paper: '#9e4526' },
+  { key: 'marker',     name: 'Marker',     ink: '#ff5a2d', paper: '#b3401f' },
+  { key: 'cyan',       name: 'Cyan',       ink: '#7a99a1', paper: '#4e6b73' },
+  { key: 'success',    name: 'Sage',       ink: '#7d9a7f', paper: '#5e7a60' },
+  { key: 'burgundy',   name: 'Burgundy',   ink: '#a87795', paper: '#7c5570' },
+  { key: 'indigo',     name: 'Indigo',     ink: '#8087a6', paper: '#565e7e' },
+  { key: 'rose',       name: 'Rose',       ink: '#b57a86', paper: '#8f5560' },
 ];
 
-/* THE ICOR FOR LIFE SCAFFOLD, as the theme styles it. Listed so a member can
- * see what the theme does to each of these folders and change any of it from
- * here. This table is DISPLAY DATA: the theme renders these rooms on its own
- * and reads nothing from this list. It exists so the settings tab can show a
- * true picture before the user touches anything, and so an edit starts from
- * the right values rather than from blanks.
- *
- * Rooms are keyed on their numeric prefix, subfolders on the room plus their
- * own name, resolved against the live vault - because that is how the theme
- * keys them, and a room Tom renamed to "04 Somewhere Else" is still the
- * Inner World room. Icons are the Lucide ids the theme's glyphs were drawn
- * from, matched by path data on 2026-09-01. */
-const SCAFFOLD = [
-  { room: '00', kind: 'room', hue: 'yellow',     icon: 'pencil',         label: 'Daily Scratchpad' },
-  { room: '01', kind: 'room', hue: 'terracotta', icon: 'inbox',          label: 'Inbox' },
-  { room: '02', kind: 'room', hue: 'marker',     icon: 'calendar-range', label: 'Planner' },
-  { room: '03', kind: 'room', hue: 'cyan',       icon: 'hammer',         label: 'WiP' },
-  { room: '04', kind: 'room', hue: 'success',    icon: 'sprout',         label: 'Inner World' },
-  { room: '05', kind: 'room', hue: 'burgundy',   icon: 'package',        label: 'Assets' },
-  { room: '06', kind: 'room', hue: 'indigo',     icon: 'bot',            label: 'AI Team' },
-  { room: '07', kind: 'room', hue: 'rose',       icon: 'database',       label: 'Databases' },
-  { room: '01', sub: 'Outer World',       kind: 'family', hue: 'terracotta', icon: 'globe' },
-  { room: '01', sub: 'Scanner Inbox',     kind: 'family', hue: 'terracotta', icon: 'scan-line' },
-  { room: '04', sub: 'Contacts',          kind: 'family', hue: 'cyan',       icon: 'users' },
-  { room: '04', sub: 'Journal',           kind: 'family', hue: 'yellow',     icon: 'notebook-pen' },
-  { room: '04', sub: 'My Life',           kind: 'family', hue: 'success',    icon: 'heart' },
-  { room: '04', sub: 'Goals',             kind: 'family', hue: 'terracotta', icon: 'target' },
-  { room: '04', sub: 'Habits',            kind: 'family', hue: 'indigo',     icon: 'repeat' },
-  { room: '04', sub: 'Key Elements',      kind: 'family', hue: 'burgundy',   icon: 'landmark' },
-  { room: '04', sub: 'Projects',          kind: 'family', hue: 'cyan',       icon: 'folder-kanban' },
-  { room: '04', sub: 'Topics',            kind: 'family', hue: 'yellow',     icon: 'library' },
-  { room: '05', sub: 'Images',            kind: 'family', hue: 'burgundy',   icon: 'image' },
-  { room: '05', sub: 'Audio',             kind: 'family', hue: 'burgundy',   icon: 'music' },
-  { room: '05', sub: 'Documents',         kind: 'family', hue: 'burgundy',   icon: 'file-text' },
-  { room: '06', sub: 'AI Team Knowledge', kind: 'family', hue: 'indigo',     icon: 'book-open' },
-  { room: '06', sub: 'Agents',            kind: 'family', hue: 'indigo',     icon: 'users' },
-  { room: '06', sub: 'AI Sessions',       kind: 'family', hue: 'indigo',     icon: 'messages-square' },
-  { room: '06', sub: 'Workstreams',       kind: 'family', hue: 'indigo',     icon: 'workflow' },
-  { room: '06', sub: 'SOPs',              kind: 'family', hue: 'indigo',     icon: 'clipboard-list' },
-  { room: '06', sub: 'Guidelines',        kind: 'family', hue: 'indigo',     icon: 'book-marked' },
-  { room: '06', sub: 'Scripts',           kind: 'family', hue: 'indigo',     icon: 'code' },
-  { room: '06', sub: 'Tasks',             kind: 'family', hue: 'indigo',     icon: 'square-check-big' },
-  { room: '06', sub: 'Session Logs',      kind: 'family', hue: 'indigo',     icon: 'history' },
-  { room: '06', sub: 'Avatars',           kind: 'family', hue: 'indigo',     icon: 'circle-user' },
-  { room: '06', sub: 'Brand',             kind: 'family', hue: 'indigo',     icon: 'infinity' },
-];
+/* ---------------------------------------------------------------- stages --
+ * The built-in stage map: exactly the `stages` of a 3.0 schema.json (the ICOR
+ * stages contract). Used only when the vault's schema has no `stages`. */
+const SCHEMA_PATH = '_System/schema.json';
+const BUILTIN_STAGES = {
+  input:   { label: 'Input',   color: '#5271FC', folders: ['00 Daily Notes', '01 Inbox'] },
+  control: { label: 'Control', color: '#52F49A', folders: ['02 Inner World', '03 Outer World', '04 Assets', '05 Databases'] },
+  output:  { label: 'Output',  color: '#FD63FF', folders: ['06 Planner'] },
+  refine:  { label: 'Refine',  folders: [], about: 'no folder: the plugins (AI Chat, Connect, Focus) and the weekly review' },
+};
+/* A vault from before the stage layout (2.x, early 3.0) whose schema has no
+ * `stages`: its top folders, by full name, in the stage they became. Never
+ * used when the schema has `stages`. Not here, on purpose: "06 AI Team" (a
+ * myPKA team) and "03 WiP", which are in no stage. */
+const LEGACY_STAGE_FOLDERS = {
+  '00 Daily Scratchpad': 'input',
+  '02 Planner': 'output',
+  '04 Inner World': 'control',
+  '05 Assets': 'control',
+  '06 Outer World': 'control',
+  '07 Databases': 'control',
+};
+/* The one thing looked up per folder: its icon, by full name (Lucide ids, as
+ * Obsidian ships them). A stage folder not listed here gets a plain folder. */
+const FOLDER_ICONS = {
+  '00 Daily Notes': 'pencil',
+  '01 Inbox': 'inbox',
+  '02 Inner World': 'sprout',
+  '03 Outer World': 'globe',
+  '04 Assets': 'package',
+  '05 Databases': 'database',
+  '06 Planner': 'calendar-range',
+  '00 Daily Scratchpad': 'pencil',
+  '02 Planner': 'calendar-range',
+  '04 Inner World': 'sprout',
+  '05 Assets': 'package',
+  '06 Outer World': 'globe',
+  '07 Databases': 'database',
+};
+/* Named subfolders, at any depth inside a stage folder, keep their own icon;
+ * their colour is the stage's like every other folder in it. */
+const SUBFOLDER_ICONS = {
+  'Outer World': 'globe',
+  'Scanner Inbox': 'scan-line',
+  'Contacts': 'users',
+  'Journal': 'notebook-pen',
+  'My Life': 'heart',
+  'Goals': 'target',
+  'Habits': 'repeat',
+  'Key Elements': 'landmark',
+  'Projects': 'folder-kanban',
+  'Topics': 'library',
+  'Images': 'image',
+  'Audio': 'music',
+  'Documents': 'file-text',
+};
+
+/* The colour a stage colour becomes in the paper room: the same hue, darkened
+ * just enough to read at 4.5:1 on INKLINE's paper (#f6f3ec). The stage
+ * colours are made for ink; #52F49A on paper is 1.3:1. */
+const PAPER_GROUND = [0xf6, 0xf3, 0xec];
+function luminance(rgb) {
+  const lin = (c) => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+}
+function paperTone(hex) {
+  const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const ground = luminance(PAPER_GROUND);
+  for (let k = 100; k >= 0; k--) {
+    const m = rgb.map((c) => Math.round((c * k) / 100));
+    if ((ground + 0.05) / (luminance(m) + 0.05) >= 4.5) return `#${m.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  }
+  return '#000000';
+}
+
+/* A colour from the schema goes into an inline style, so only a plain hex
+ * colour passes; anything else is no colour. */
+function hexColor(v) {
+  if (typeof v !== 'string') return null;
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v.trim());
+  if (!m) return null;
+  const h = m[1].length === 3 ? m[1].split('').map((c) => c + c).join('') : m[1];
+  return `#${h.toLowerCase()}`;
+}
+
+/* The stage map, from a parsed schema.json (or null): every stage with a
+ * colour and folders, and for each folder name its stage. `descriptions` is
+ * the schema's one line per folder, `folders` or, in an older schema,
+ * `rooms`. */
+function buildStageMap(schema) {
+  const s = schema && typeof schema === 'object' ? schema : {};
+  const own = s.stages && typeof s.stages === 'object' && !Array.isArray(s.stages) ? s.stages : null;
+  const source = own || BUILTIN_STAGES;
+  const stages = [];
+  const byFolder = new Map();
+  for (const [key, raw] of Object.entries(source)) {
+    if (!/^[a-z][a-z0-9-]*$/.test(key) || !raw || !Array.isArray(raw.folders) || !raw.folders.length) continue;
+    const color = hexColor(raw.color) || hexColor(BUILTIN_STAGES[key] && BUILTIN_STAGES[key].color);
+    if (!color) continue;
+    const fallbackLabel = BUILTIN_STAGES[key] ? BUILTIN_STAGES[key].label : key.charAt(0).toUpperCase() + key.slice(1);
+    const stage = {
+      key,
+      label: typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : fallbackLabel,
+      color,
+      colorPaper: paperTone(color),
+      folders: raw.folders.filter((f) => typeof f === 'string' && f && !f.includes('/')),
+    };
+    stages.push(stage);
+    for (const f of stage.folders) if (!byFolder.has(f)) byFolder.set(f, stage);
+  }
+  if (!own) {
+    for (const [name, key] of Object.entries(LEGACY_STAGE_FOLDERS)) {
+      const stage = stages.find((x) => x.key === key);
+      if (stage && !byFolder.has(name)) byFolder.set(name, stage);
+    }
+  }
+  const d = s.folders && typeof s.folders === 'object' ? s.folders : (s.rooms && typeof s.rooms === 'object' ? s.rooms : {});
+  const descriptions = {};
+  for (const [k, v] of Object.entries(d)) if (typeof v === 'string') descriptions[k] = v;
+  return { stages, byFolder, descriptions, fromSchema: !!own };
+}
+
+/* What a folder looks like because of its stage, or null when it is in none:
+ * the top folder itself is drawn as a block with its label; every folder
+ * inside it takes the stage's colour, except date folders (/2026/08) and AI
+ * Chat session folders (2026-08-30_1312_...), which stay plain, as in the
+ * theme. */
+function stageLook(stageMap, path) {
+  if (!stageMap || typeof path !== 'string' || !path) return null;
+  const parts = path.split('/');
+  const stage = stageMap.byFolder.get(parts[0]);
+  if (!stage) return null;
+  if (parts.length === 1) {
+    return { stage, defaults: { path, kind: 'room', color: stage.color, colorPaper: stage.colorPaper, icon: FOLDER_ICONS[path] || 'folder', label: path.replace(/^\d{2}\s+/, '') } };
+  }
+  if (path.includes('/20')) return null;
+  const name = parts[parts.length - 1];
+  return { stage, defaults: { path, kind: 'family', color: stage.color, colorPaper: stage.colorPaper, icon: SUBFOLDER_ICONS[name] || 'folder', label: '' } };
+}
 
 const KINDS = [
-  ['room', 'Room - a block with a coloured edge, no arrow, its own label'],
+  ['room', 'Block - a block with a coloured edge, no arrow, its own label'],
   ['family', 'Family - coloured name and a small icon'],
-  ['none', "None - Obsidian's default look, even for an ICOR room"],
+  ['none', "None - Obsidian's default look, even for a stage folder"],
 ];
 
 const DEFAULT_SETTINGS = {
   showRibbon: true,
+  ribbonBack: true,
   showControls: true,
   showBanner: true,
   roomIcons: true,
@@ -182,9 +291,44 @@ const DEFAULT_SETTINGS = {
   /* folded, the round button is invisible until the pointer comes near it
      (or it has keyboard focus); off, it is always visible */
   statusBarButtonOnHover: true,
+  /* INKLINE's Look: 'gradient' (lit plates and glass) or 'flat' (ink and paper); the theme reads the class */
+  look: 'gradient',
+  /* _System (schema, templates, skills, tools) in the file tree; hidden by default, it is still there */
+  showSystem: false,
+  /* the file explorer's own button row (New note, New folder, sort, auto-reveal, collapse); hidden by default, with
+     Collapse all and Show the open note in the left ribbon instead (Tom, 2026-11-23) */
+  showExplorerButtons: false,
+  /* where a note's properties show: 'top' (Obsidian's way), 'collapsed' (on top, folded), 'bottom' (under the note),
+     'sidebar' (hidden in notes: Obsidian's own Properties in document: Hidden, and its File properties panel) */
+  properties: 'top',
 };
 
+/* Before 0.9.0 these three lived in ICOR Objects; its settings are read once, on the first load here. */
+const FROM_OBJECTS = ['look', 'showSystem', 'properties'];
+const PROPERTY_PLACES = ['top', 'collapsed', 'bottom', 'sidebar'];
+const LOOK_CLASSES = { gradient: 'inkline-gradient', flat: 'inkline-flat' };
+const HIDE_SYSTEM_CLASS = 'icor-hide-system';
+const PROPS_BOTTOM_CLASS = 'icor-props-bottom';
+const PROPS_FOLD_CLASS = 'icor-props-folding';
+
 const OUTLINE_DEPTH_PREFIX = 'icor-outline-depth-';
+
+/* The file explorer's button row (0.11.0, Tom 2026-11-23). One body class hides the row (styles.css, any theme); this
+   file never writes into the row, so taking the class off gives Obsidian's row back exactly as it was.
+   Its two buttons worth having move to the left ribbon, where members reorder or hide them under Settings,
+   Appearance, Ribbon menu like any plugin's icon: Collapse all (which presses the host's own button, hidden or not)
+   and reveal the open note, which runs Obsidian's own command. */
+const EXPLORER_BUTTONS_CLASS = 'icor-hide-explorer-buttons';
+const REVEAL_COMMAND = 'file-explorer:reveal-active-file';
+/* The host's row inside the file explorer view, only ever read (to find its own Collapse all button and press it):
+   see collapseButton. */
+const EXPLORER_ROW = '.nav-buttons-container';
+const REVEAL_ICON = 'navigation';
+const REVEAL_LABEL = 'Show the open note in the file tree';
+const COLLAPSE_ICON = 'chevrons-down-up';
+const EXPAND_ICON = 'chevrons-up-down';
+const COLLAPSE_LABEL = 'Collapse all folders';
+const EXPAND_LABEL = 'Expand all folders';
 
 /* The collapsible status bar. The two body classes are what styles.css
    guards on: the fold, and the hover reveal of the round button. The three
@@ -212,8 +356,10 @@ const STATUS_FAB_LABEL = 'Unfold status bar to the left';
 const STATUS_ITEM_LABEL = 'Fold status bar to the right';
 
 /* The two folders that make a vault an ICOR for Life vault. Present together
- * at the root, and this plugin has never saved anything, the scaffold's own
- * defaults apply on first run: ribbon hidden, chrome reduced. Everyone else
+ * at the root, and this plugin has never saved anything, ICOR for Life's own
+ * defaults apply on first run: ribbon hidden, chrome reduced. Number prefixes
+ * here on purpose: every layout (2.x, 3.0, the stage layout) has a 00 and a
+ * 06, and this only asks "is it ICOR", never which folder is which. Everyone else
  * starts with nothing hidden, because a plugin that removes navigation from
  * a vault it was just installed into has broken that vault. */
 const ICOR_MARKERS = [/^00 /, /^06 /];
@@ -222,6 +368,7 @@ const INKLINE_THEME = 'ICOR for Life - INKLINE';
 const STYLE_SETTINGS_ID = 'obsidian-style-settings';
 const MANAGED = 'data-icor-managed';
 const KIND = 'data-icor-kind';
+const STAGE_ATTR = 'data-icor-stage';
 const PROPS = ['--room-color', '--room-color-paper', '--room-icon', '--room-label'];
 
 /* Serialise one of Obsidian's Lucide icons into the mask URL the theme reads.
@@ -244,6 +391,23 @@ class IcorInterfacePlugin extends Plugin {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, this.migrate(saved || {}));
     this.settings.folders = Array.isArray(this.settings.folders) ? this.settings.folders : [];
     if (saved === null || saved === undefined) this.applyFirstRunDefaults();
+    /* A ribbon an earlier first run hid (when the launchers sat in the file tree) comes back once: the launchers live
+       there now. Whatever the member sets after that stays. */
+    else if (!saved.ribbonBack) {
+      this.settings.showRibbon = true;
+      this.settings.ribbonBack = true;
+      await this.saveData(this.settings);
+    }
+    if (!saved || FROM_OBJECTS.some((k) => !(k in saved))) await this.importFromObjects(saved || {});
+    if (this.nativeProperties() === 'hidden' && this.settings.properties !== 'sidebar') this.settings.properties = 'sidebar';
+    /* The stage map, once; again only when _System/schema.json changes. */
+    await this.loadStages();
+    const onSchema = (f) => {
+      if (f && f.path === SCHEMA_PATH) void this.loadStages().then(() => this.applyFolders());
+    };
+    if (this.app.vault && typeof this.app.vault.on === 'function') {
+      for (const ev of ['modify', 'create', 'delete']) this.registerEvent(this.app.vault.on(ev, onSchema));
+    }
 
     this.addSettingTab(new IcorInterfaceSettingTab(this.app, this));
 
@@ -272,13 +436,69 @@ class IcorInterfacePlugin extends Plugin {
       },
     });
 
+    /* The file explorer's two buttons, in the ribbon. The ribbon item keeps the name it was added with (that is what
+       the Ribbon menu lists); only its icon and tooltip follow the tree, the way the host's own button does. */
+    this.collapseRibbonEl = this.addRibbonIcon(COLLAPSE_ICON, COLLAPSE_LABEL, () => { void this.toggleCollapseAll({ fromRibbon: true }); });
+    this.addRibbonIcon(REVEAL_ICON, REVEAL_LABEL, () => this.revealActiveFile());
+    /* Reveal has its command already: Obsidian's own, "Reveal current file in navigation". Collapse has none in the
+       host, so it gets one here; it withdraws when there is no tree to fold. */
+    this.addCommand({
+      id: 'collapse-all-folders',
+      name: 'Collapse or expand all folders in the file tree',
+      checkCallback: (checking) => {
+        if (!this.fileExplorerLeaf()) return false;
+        if (!checking) void this.toggleCollapseAll();
+        return true;
+      },
+    });
+
+    this.addCommand({
+      id: 'toggle-look', name: 'Switch the look between flat and gradient',
+      callback: async () => { this.settings.look = this.settings.look === 'flat' ? 'gradient' : 'flat'; await this.saveSettings(); },
+    });
+    this.addCommand({
+      id: 'show-file-properties', name: "Show the note's properties in the right sidebar",
+      callback: () => { void this.showPropertiesPanel(true); },
+    });
+    this.addCommand({
+      id: 'toggle-system', name: 'Show or hide _System in the file tree',
+      callback: async () => { this.settings.showSystem = !this.settings.showSystem; await this.saveSettings(); },
+    });
+
+    /* Properties folded on top: each note opens with them folded, once (unfolding it stays unfolded while it is
+       open), and the whole bar folds and unfolds, not only its little arrow. */
+    this.registerEvent(this.app.workspace.on('file-open', () => window.setTimeout(() => this.foldProperties(), 0)));
+    this.registerEvent(this.app.workspace.on('layout-change', () => this.foldProperties()));
+    this.registerEvent(this.app.metadataCache.on('changed', () => this.countProperties()));
+    /* A mouse click on the properties bar leaves Obsidian's toggle holding the focus, and the theme draws the focus
+       ring for it as if the keyboard had moved there: let go of it after a click (a key press keeps its ring). */
+    this.registerDomEvent(document, 'click', (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== 'function' || !e.detail || !t.closest('.metadata-container')) return;
+      window.setTimeout(() => {
+        const a = document.activeElement;
+        if (a && typeof a.closest === 'function' && a.closest('.metadata-properties-heading') && typeof a.blur === 'function') a.blur();
+      }, 0);
+    });
+    this.registerDomEvent(document, 'click', (e) => {
+      const t = e.target;
+      if (!t || typeof t.closest !== 'function' || !document.body.classList.contains(PROPS_FOLD_CLASS)) return;
+      const box = t.closest('.metadata-container');
+      if (!box || !box.classList.contains('is-collapsed') || t.closest('.metadata-properties-heading')) return;
+      const head = box.querySelector('.metadata-properties-heading');
+      if (head) head.click();
+    });
+
     this.app.workspace.onLayoutReady(() => {
       this.applyChrome();
+      this.syncCollapseRibbon();
+      this.foldProperties();
       this.applyFolders();
       this.observeExplorer();
     });
     this.registerEvent(this.app.workspace.on('layout-change', () => {
       this.applyChrome();
+      this.syncCollapseRibbon();
       this.applyFolders();
       this.observeExplorer();
     }));
@@ -309,6 +529,7 @@ class IcorInterfacePlugin extends Plugin {
        classes, and every row it claimed. Left behind, the theme would keep
        rendering a configuration nobody can edit any more. */
     for (const s of SWITCHES) document.body.classList.remove(s.cls);
+    document.body.classList.remove(...Object.values(LOOK_CLASSES), HIDE_SYSTEM_CLASS, PROPS_BOTTOM_CLASS, PROPS_FOLD_CLASS, EXPLORER_BUTTONS_CLASS);
     this.applyOutline(0);
     this.teardownStatusBar();
     for (const row of document.querySelectorAll(`[${MANAGED}]`)) this.releaseRow(row);
@@ -345,10 +566,26 @@ class IcorInterfacePlugin extends Plugin {
     return ICOR_MARKERS.every((re) => names.some((n) => re.test(n)));
   }
 
+  /* The three settings Objects held before 0.9.0, taken once from its saved settings; what this plugin already has
+     wins. Objects stops writing them, so the two can never disagree after this. */
+  async importFromObjects(saved) {
+    const adapter = this.app.vault.adapter;
+    if (!adapter || typeof adapter.exists !== 'function') return;
+    try {
+      const path = `${this.app.vault.configDir}/plugins/icor-for-life-objects/data.json`;
+      if (!(await this.app.vault.adapter.exists(path))) return;
+      const o = JSON.parse(await this.app.vault.adapter.read(path)) || {};
+      let changed = false;
+      for (const k of FROM_OBJECTS) if (!(k in saved) && k in o) { this.settings[k] = o[k]; changed = true; }
+      if (!PROPERTY_PLACES.includes(this.settings.properties)) this.settings.properties = 'top';
+      if (changed) await this.saveData(this.settings);
+    } catch (e) { console.warn('ICOR Interface: the settings from Objects could not be read', e); }
+  }
+
+  /* Every ICOR for Life plugin keeps its launcher in Obsidian's ribbon (Tom, 2026-11-23), and nothing reroutes the
+     file controls any more: a first run hides neither, in any vault. */
   applyFirstRunDefaults() {
     if (!this.isIcorVault()) return;
-    this.settings.showRibbon = false;
-    this.settings.showControls = false;
     this.firstRunApplied = true;
   }
 
@@ -384,11 +621,93 @@ class IcorInterfacePlugin extends Plugin {
   applyChrome() {
     this.applyOutline(this.settings.outlineDepth);
     this.applyStatusBar();
+    this.applyNotes();
+    /* Not a theme class: this plugin's, whoever owns the five switches below. */
+    document.body.toggleClass(EXPLORER_BUTTONS_CLASS, !this.settings.showExplorerButtons);
     if (this.styleSettingsActive()) return;
     for (const s of SWITCHES) {
       const on = !!this.settings[s.key];
       document.body.classList.toggle(s.cls, s.on === 'present' ? on : !on);
     }
+  }
+
+  /* The Look, _System and the properties: classes on <body>. The Look is the theme's (INKLINE reads the class; Style
+     Settings can set it too, whichever ran last wins); _System and the properties work on any theme (styles.css). */
+  applyNotes() {
+    const b = document.body.classList;
+    const look = this.settings.look === 'flat' ? 'flat' : 'gradient';
+    for (const [k, cls] of Object.entries(LOOK_CLASSES)) b.toggle(cls, k === look);
+    b.toggle(HIDE_SYSTEM_CLASS, !this.settings.showSystem);
+    b.toggle(PROPS_BOTTOM_CLASS, this.settings.properties === 'bottom');
+    b.toggle(PROPS_FOLD_CLASS, this.settings.properties === 'collapsed');
+    this.syncNativeProperties();
+    this.foldProperties();
+  }
+
+  /* "Hidden in notes" is Obsidian's own switch (Settings, Editor, Properties in document), so it is set there, not
+     imitated: Hidden while this plugin says sidebar, back to Visible when it says anything else (only if Obsidian is
+     on Hidden, so its Source mode is left alone). The note's properties then live in the File properties panel. */
+  nativeProperties() {
+    const v = this.app.vault.getConfig ? this.app.vault.getConfig('propertiesInDocument') : null;
+    return typeof v === 'string' ? v : 'visible';
+  }
+
+  syncNativeProperties() {
+    if (!this.app.vault.setConfig) return;
+    const native = this.nativeProperties();
+    if (this.settings.properties === 'sidebar') {
+      if (native !== 'hidden') this.app.vault.setConfig('propertiesInDocument', 'hidden');
+      this.app.workspace.onLayoutReady(() => { void this.showPropertiesPanel(false); });
+    } else if (native === 'hidden') {
+      this.app.vault.setConfig('propertiesInDocument', 'visible');
+    }
+  }
+
+  /* Obsidian's File properties panel (the open note's properties; "All properties" is the vault's list) in the right
+     sidebar: made if it is not there, brought forward when asked. */
+  async showPropertiesPanel(reveal) {
+    const ws = this.app.workspace;
+    let leaf = ws.getLeavesOfType('file-properties')[0];
+    if (!leaf) {
+      leaf = ws.getRightLeaf(false);
+      if (!leaf) return;
+      await leaf.setViewState({ type: 'file-properties', active: false });
+      reveal = true;
+    }
+    if (reveal) await ws.revealLeaf(leaf);
+  }
+
+  /* Folds the properties of every open note once per note, through Obsidian's own toggle so it keeps its state, and
+     hands the keyboard back to the note (the toggle takes focus, and the theme would draw a focus ring). */
+  foldProperties() {
+    if (this.settings.properties !== 'collapsed') return;
+    if (!this.folded) this.folded = new WeakMap();
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (!view || !view.file || view.getViewType() !== 'markdown') return;
+      const box = view.containerEl.querySelector('.metadata-container');
+      if (!box || this.folded.get(box) === view.file.path) return;
+      this.folded.set(box, view.file.path);
+      if (!box.classList.contains('is-collapsed')) {
+        const head = box.querySelector('.metadata-properties-heading');
+        if (head) head.click();
+        if (box.contains(document.activeElement) && view.editor) view.editor.focus();
+      }
+    });
+    this.countProperties();
+  }
+
+  /* How many properties a folded bar holds, shown at its right end. */
+  countProperties() {
+    this.app.workspace.iterateAllLeaves((leaf) => {
+      const view = leaf.view;
+      if (!view || !view.file || view.getViewType() !== 'markdown') return;
+      const head = view.containerEl.querySelector('.metadata-properties-heading');
+      if (!head) return;
+      const fm = (this.app.metadataCache.getFileCache(view.file) || {}).frontmatter || {};
+      const n = Object.keys(fm).filter((k) => k !== 'position').length;
+      head.setAttribute('data-icor-count', n ? String(n) : '');
+    });
   }
 
   /* The core Outline has no API, but it is a tree of nested .tree-item
@@ -558,6 +877,78 @@ class IcorInterfacePlugin extends Plugin {
     return next;
   }
 
+  /* ------------------------------------------------ the explorer's buttons --
+   * Collapse all is not in Obsidian's API and has no command, so the ribbon
+   * icon presses the host's OWN button, as ICOR Connect's command does: one
+   * implementation, the folds saved by the host, and the host's button (when
+   * shown) flipping with it. The button is found by its glyph, which the host
+   * swaps between `chevrons-down-up` (collapse) and `chevrons-up-down` (all
+   * folded, so expand); a hidden button still takes a click. The row is only
+   * read and clicked, never written: no class, attribute or child of it is
+   * changed here. A sidebar tab Obsidian has not loaded since start
+   * (`isDeferred`) is loaded first, through the public `loadIfDeferred`. */
+  collapseButton() {
+    const leaf = this.fileExplorerLeaf();
+    const root = leaf && leaf.view && leaf.view.containerEl;
+    const row = root && typeof root.querySelector === 'function' ? root.querySelector(EXPLORER_ROW) : null;
+    if (!row) return null;
+    for (const btn of row.querySelectorAll('.clickable-icon')) {
+      if (btn.querySelector('.lucide-chevrons-down-up')) return { btn, folded: false };
+      if (btn.querySelector('.lucide-chevrons-up-down')) return { btn, folded: true };
+    }
+    return null;
+  }
+
+  /* A press does what the icon said. Normally the host's button and the icon agree; but a tree Obsidian had not
+     loaded yet could not tell the icon anything, so on the press that loads it, a tree already folded the way the icon
+     offered is left as it is and only the icon catches up. */
+  async toggleCollapseAll({ fromRibbon = false } = {}) {
+    const leaf = this.fileExplorerLeaf();
+    if (!leaf) { new Notice('The file tree is turned off: turn on the file explorer core plugin first.'); return null; }
+    const wasDeferred = !!leaf.isDeferred;
+    if (wasDeferred && typeof leaf.loadIfDeferred === 'function') await leaf.loadIfDeferred();
+    const found = this.collapseButton();
+    if (!found) {
+      new Notice('This version of Obsidian has no collapse button in the file tree.');
+      return null;
+    }
+    if (fromRibbon && wasDeferred && this.collapseRibbonEl) {
+      const fold = this.collapseRibbonEl.getAttribute('aria-label') !== EXPAND_LABEL;
+      if (found.folded === fold) { this.syncCollapseRibbon(); return found.folded; }
+    }
+    found.btn.click();
+    this.syncCollapseRibbon();
+    return !found.folded;
+  }
+
+  /* The ribbon icon says what a press will do, read off the host's button: all folded, it offers to expand. */
+  syncCollapseRibbon() {
+    const el = this.collapseRibbonEl;
+    if (!el) return;
+    const found = this.collapseButton();
+    const folded = !!(found && found.folded);
+    setIcon(el, folded ? EXPAND_ICON : COLLAPSE_ICON);
+    const label = folded ? EXPAND_LABEL : COLLAPSE_LABEL;
+    if (typeof setTooltip === 'function') setTooltip(el, label);
+    else el.setAttribute('aria-label', label);
+  }
+
+  /* Obsidian's executeCommandById answers true whenever the command exists, even when its own check said no (1.15.1),
+     so the two reasons it cannot run are asked first: no open note, or no File explorer to show it in. */
+  revealActiveFile() {
+    const ws = this.app.workspace;
+    const file = ws && typeof ws.getActiveFile === 'function' ? ws.getActiveFile() : null;
+    if (!file) { new Notice('Open a note first, then this shows it in the file tree.'); return false; }
+    const cmds = this.app.commands;
+    const known = cmds && typeof cmds.findCommand === 'function' ? !!cmds.findCommand(REVEAL_COMMAND) : true;
+    if (!known || !cmds || typeof cmds.executeCommandById !== 'function' || !this.fileExplorerLeaf()) {
+      new Notice('The file tree is turned off: turn on the file explorer core plugin first.');
+      return false;
+    }
+    cmds.executeCommandById(REVEAL_COMMAND);
+    return true;
+  }
+
   /* ------------------------------------------------------------ folders -- */
 
   explorerEl() {
@@ -571,7 +962,7 @@ class IcorInterfacePlugin extends Plugin {
        change. Debounced: reapplying is repair work nobody is watching. */
     this.observer = new MutationObserver(() => {
       window.clearTimeout(this.observerTimer);
-      this.observerTimer = window.setTimeout(() => this.applyFolders(), 150);
+      this.observerTimer = window.setTimeout(() => { this.applyFolders(); this.syncCollapseRibbon(); }, 150);
     });
     this.observer.observe(explorer, { childList: true, subtree: true });
   }
@@ -580,19 +971,55 @@ class IcorInterfacePlugin extends Plugin {
     return this.settings.folders.find((f) => f.path === path) || null;
   }
 
+  /* Read _System/schema.json and build the stage map. No schema, a schema
+     that is not JSON, or one without `stages`: the built-in map. */
+  async loadStages() {
+    let schema = null;
+    const adapter = this.app.vault && this.app.vault.adapter;
+    try {
+      if (adapter && typeof adapter.exists === 'function' && await adapter.exists(SCHEMA_PATH)) {
+        schema = JSON.parse(await adapter.read(SCHEMA_PATH));
+      }
+    } catch (e) {
+      console.warn('ICOR Interface: _System/schema.json could not be read; using the built-in stage colours', e);
+      schema = null;
+    }
+    this.stageMap = buildStageMap(schema);
+    this.iconCache = new Map();
+    return this.stageMap;
+  }
+
+  stageLook(path) {
+    if (!this.stageMap) this.stageMap = buildStageMap(null);
+    return stageLook(this.stageMap, path);
+  }
+
+  /* The member's own settings for a folder win; otherwise its stage decides. */
   applyFolders() {
     const explorer = this.explorerEl();
     if (!explorer) return;
     for (const row of explorer.querySelectorAll('.nav-folder-title[data-path]')) {
-      const cfg = this.folderConfig(row.getAttribute('data-path'));
-      if (cfg && cfg.kind) this.claimRow(row, cfg);
+      const path = row.getAttribute('data-path');
+      const look = this.stageLook(path);
+      const cfg = this.folderConfig(path);
+      if (cfg && cfg.kind) this.claimRow(row, cfg, look && look.stage);
+      else if (look) this.claimRow(row, look.defaults, look.stage);
       else if (row.hasAttribute(MANAGED)) this.releaseRow(row);
     }
   }
 
-  claimRow(row, cfg) {
+  icon(id) {
+    if (!id) return null;
+    if (!this.iconCache) this.iconCache = new Map();
+    if (!this.iconCache.has(id)) this.iconCache.set(id, iconUrl(id));
+    return this.iconCache.get(id);
+  }
+
+  claimRow(row, cfg, stage) {
     row.setAttribute(MANAGED, '1');
     row.setAttribute(KIND, cfg.kind);
+    if (stage) row.setAttribute(STAGE_ATTR, stage.key);
+    else row.removeAttribute(STAGE_ATTR);
     const set = (prop, value) => {
       if (value) row.style.setProperty(prop, value);
       else row.style.removeProperty(prop);
@@ -603,19 +1030,20 @@ class IcorInterfacePlugin extends Plugin {
     }
     set('--room-color', cfg.color);
     set('--room-color-paper', cfg.colorPaper);
-    set('--room-icon', cfg.icon ? iconUrl(cfg.icon) : null);
+    set('--room-icon', cfg.icon ? this.icon(cfg.icon) : null);
     set('--room-label', cfg.kind === 'room' ? JSON.stringify(cfg.label || this.defaultLabel(cfg.path)) : null);
   }
 
   releaseRow(row) {
     row.removeAttribute(MANAGED);
     row.removeAttribute(KIND);
+    row.removeAttribute(STAGE_ATTR);
     for (const p of PROPS) row.style.removeProperty(p);
   }
 
-  /* An edit to a scaffold folder becomes an override: the theme keeps drawing
-     the rest of the scaffold, and this row is now the plugin's. Starting from
-     the theme's own values, so changing one thing changes one thing. */
+  /* An edit to a stage folder becomes an override: the other folders keep
+     their stage colour, and this row is now the member's. Starting from the
+     stage's own values, so changing one thing changes one thing. */
   async overrideFolder(defaults, patch) {
     let cfg = this.settings.folders.find((f) => f.path === defaults.path);
     if (!cfg) {
@@ -633,9 +1061,15 @@ class IcorInterfacePlugin extends Plugin {
     await this.saveSettings();
   }
 
-  /* The label a room shows when the user gave none: the folder's own name
+  /* The label a block shows when the user gave none: the folder's own name
      with a leading sort prefix ("00 ", "06 ") taken off, which is what the
-     theme's defaults do for the ICOR rooms. */
+     theme's defaults do for the stage folders. */
+  palette() {
+    const stages = (this.stageMap || buildStageMap(null)).stages
+      .map((st) => ({ key: `stage-${st.key}`, name: `${st.label} (ICOR stage)`, ink: st.color, paper: st.colorPaper }));
+    return stages.concat(PALETTE);
+  }
+
   defaultLabel(path) {
     const name = path.split('/').pop();
     return name.replace(/^\d{2}\s+/, '');
@@ -695,7 +1129,9 @@ class DiagramModal extends Modal {
     this.natH = (vb && vb.height) || rect.height || 400;
     svg.setAttribute('width', String(this.natW));
     svg.setAttribute('height', String(this.natH));
-    svg.style.maxWidth = 'none';
+    /* Mermaid caps the drawing with an inline max-width; clear it and let
+       styles.css (.icor-diag-holder > svg) lift the cap. */
+    svg.style.maxWidth = '';
     this.holder.style.width = this.natW + 'px';
     this.holder.style.height = this.natH + 'px';
     this.holder.appendChild(svg);
@@ -870,24 +1306,18 @@ IcorInterfacePlugin.prototype.removeDiagramButtons = function () {
   for (const h of document.querySelectorAll('.icor-diag-host')) h.classList.remove('icor-diag-host');
 };
 
-/* ----------------------------------------------------- the scaffold list -- */
+/* ---------------------------------------------------- the ICOR folders -- */
 
-/* Resolve every SCAFFOLD entry against the live vault: the room is the root
- * folder whose name starts with the prefix, the subfolder is the first folder
- * of that name anywhere under it (the theme keys subfolders on their own
- * name, at any depth). Entries whose folder does not exist are left out - a
- * settings row for a folder that is not there is a row that does nothing. */
+/* The stage folders that exist in this vault, for the settings tab: each top
+ * folder of a stage (by full name), then the named subfolders found anywhere
+ * under it. Folders that do not exist are left out - a settings row for a
+ * folder that is not there is a row that does nothing. */
 function isFolder(node) { return node instanceof TFolder || Array.isArray(node.children); }
 
-function resolveScaffold(app) {
+function resolveIcorFolders(app, stageMap) {
+  const map = stageMap || buildStageMap(null);
   const root = app.vault.getRoot && app.vault.getRoot();
   if (!root || !root.children) return [];
-  const rooms = new Map();
-  for (const child of root.children) {
-    if (!isFolder(child)) continue;
-    const m = /^(\d{2}) /.exec(child.name);
-    if (m && !rooms.has(m[1])) rooms.set(m[1], child);
-  }
   const findSub = (folder, name) => {
     for (const child of folder.children || []) {
       if (!isFolder(child)) continue;
@@ -897,17 +1327,19 @@ function resolveScaffold(app) {
     }
     return null;
   };
+  const tops = root.children.filter((c) => isFolder(c) && map.byFolder.has(c.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const out = [];
-  for (const entry of SCAFFOLD) {
-    const room = rooms.get(entry.room);
-    if (!room) continue;
-    const folder = entry.sub ? findSub(room, entry.sub) : room;
-    if (!folder) continue;
-    const hue = PALETTE.find((p) => p.key === entry.hue);
-    out.push({
-      path: folder.path,
-      defaults: { path: folder.path, kind: entry.kind, color: hue.ink, colorPaper: hue.paper, icon: entry.icon, label: entry.label || '' },
-    });
+  for (const top of tops) {
+    const look = stageLook(map, top.path);
+    if (!look) continue;
+    out.push({ path: top.path, stage: look.stage, description: map.descriptions[top.name] || '', defaults: look.defaults });
+    for (const name of Object.keys(SUBFOLDER_ICONS)) {
+      const sub = findSub(top, name);
+      if (!sub) continue;
+      const subLook = stageLook(map, sub.path);
+      if (subLook) out.push({ path: sub.path, stage: subLook.stage, description: '', defaults: subLook.defaults });
+    }
   }
   return out;
 }
@@ -969,10 +1401,38 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    this.renderNotes(containerEl);
     this.renderChrome(containerEl);
     this.renderOutline(containerEl);
     this.renderDiagrams(containerEl);
     this.renderFolders(containerEl);
+  }
+
+  renderNotes(containerEl) {
+    const s = this.plugin.settings;
+    const save = async () => { await this.plugin.saveSettings(); };
+    new Setting(containerEl).setName('Look and notes').setHeading();
+    new Setting(containerEl)
+      .setName('Look')
+      .setDesc('For the INKLINE theme. Flat: ink and paper with one orange marker. Gradient: lit plates and glass cards with depth.')
+      .addDropdown((d) => d.addOption('gradient', 'Gradient').addOption('flat', 'Flat')
+        .setValue(s.look === 'flat' ? 'flat' : 'gradient')
+        .onChange(async (v) => { s.look = v === 'flat' ? 'flat' : 'gradient'; await save(); }));
+    new Setting(containerEl)
+      .setName('Properties')
+      .setDesc("Where a note's properties show. On top is Obsidian's way; folded keeps them one click away (the whole bar opens them); under the note puts your writing first; hidden in notes turns on Obsidian's own switch (Settings, Editor, Properties in document: Hidden) and opens the File properties panel in the right sidebar, where they show beside the note.")
+      .addDropdown((d) => d.addOption('top', 'On top').addOption('collapsed', 'On top, folded').addOption('bottom', 'Under the note').addOption('sidebar', 'Hidden in notes (right sidebar)')
+        .setValue(this.plugin.nativeProperties() === 'hidden' ? 'sidebar' : PROPERTY_PLACES.includes(s.properties) ? s.properties : 'top')
+        .onChange(async (v) => {
+          s.properties = PROPERTY_PLACES.includes(v) ? v : 'top';
+          this.plugin.folded = new WeakMap();
+          await save();
+          if (s.properties === 'sidebar') await this.plugin.showPropertiesPanel(true);
+        }));
+    new Setting(containerEl)
+      .setName('_System in the file tree')
+      .setDesc('The folder with the schema, templates, skills and tools. Hidden by default; it is still there, synced and used by your AI and the plugins.')
+      .addToggle((t) => t.setValue(!!s.showSystem).onChange(async (v) => { s.showSystem = v; await save(); }));
   }
 
   renderOutline(containerEl) {
@@ -1017,6 +1477,16 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
         this.renderSwitch(containerEl, s);
       }
     }
+
+    new Setting(containerEl)
+      .setName("Show Obsidian's file explorer buttons")
+      .setDesc('The row of buttons above the file tree: new note, new folder, sort order, auto-reveal and collapse all. Hidden by default: collapsing all folders and showing the open note in the file tree are icons in the left ribbon, and a new note or folder is in the file tree\'s right-click menu.')
+      .addToggle((t) => t
+        .setValue(!!this.plugin.settings.showExplorerButtons)
+        .onChange(async (v) => {
+          this.plugin.settings.showExplorerButtons = v;
+          await this.plugin.saveSettings();
+        }));
 
     this.renderAutoReveal(containerEl);
 
@@ -1089,7 +1559,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
     }
 
     /* --- the user's own additions, first: the thing you came here to do --- */
-    const scaffold = resolveScaffold(this.app);
+    const icorFolders = resolveIcorFolders(this.app, this.plugin.stageMap);
     new Setting(containerEl).setName('Your folders').setHeading();
     new Setting(containerEl)
       .setDesc('Give any other folder a colour and an icon.')
@@ -1102,9 +1572,9 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
           this.display();
         }));
 
-    const scaffoldPaths = new Set(scaffold.map((s) => s.path));
+    const icorPaths = new Set(icorFolders.map((s) => s.path));
     for (const cfg of this.plugin.settings.folders) {
-      if (scaffoldPaths.has(cfg.path)) continue;   /* a scaffold override; shown in the scaffold list below */
+      if (icorPaths.has(cfg.path)) continue;   /* a stage folder the member changed; shown in the list below */
       this.renderRow(containerEl, cfg, {
         isOverride: true,
         editablePath: true,
@@ -1116,15 +1586,18 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       });
     }
 
-    /* --- the scaffold, as the theme draws it, editable --- */
-    if (scaffold.length) {
-      new Setting(containerEl).setName('ICOR for Life - Scaffold').setHeading();
+    /* --- the ICOR folders, by stage, editable --- */
+    if (icorFolders.length) {
+      new Setting(containerEl).setName('ICOR for Life folders, by stage').setHeading();
+      const where = this.plugin.stageMap && this.plugin.stageMap.fromSchema ? 'from _System/schema.json' : 'ICOR for Life\'s own';
       new Setting(containerEl)
-        .setDesc('The folders the INKLINE theme styles on its own, with the colour and icon it gives each. Change any of them here; the change is stored, the theme keeps drawing the rest. Reset returns a folder to the theme.');
-      for (const { path, defaults } of scaffold) {
+        .setDesc(`Each ICOR stage gives its folders one colour (${where}): Input, Control, Output. Refine has no folder. Change any folder here; the change is stored and wins, the other folders keep their stage colour. Reset gives a folder its stage colour back.`);
+      for (const { path, defaults, stage, description } of icorFolders) {
         const override = this.plugin.folderConfig(path);
         this.renderRow(containerEl, override || defaults, {
           isOverride: !!override,
+          stage,
+          description,
           onChange: (patch) => this.plugin.overrideFolder(defaults, patch),
           onReset: () => this.plugin.resetFolder(path),
         });
@@ -1132,11 +1605,11 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
     }
   }
 
-  /* One row per folder, the same for a scaffold folder and a user's own:
-     name, kind, icon, hue or two colours, and a reset. Rooms get a second
+  /* One row per folder, the same for a stage folder and a user's own:
+     name, kind, icon, hue or two colours, and a reset. Blocks get a second
      line for the label. `onChange` receives a patch; the caller decides
      whether that patch becomes an override or edits an existing entry. */
-  renderRow(containerEl, cfg, { isOverride, editablePath = false, onChange, onReset }) {
+  renderRow(containerEl, cfg, { isOverride, editablePath = false, stage = null, description = '', onChange, onReset }) {
     /* No wrapper element. INKLINE draws a settings section as one card from
        a RUN OF SIBLING rows; a div around each row breaks the run and every
        row becomes its own card. Rows go straight into the container. */
@@ -1145,11 +1618,11 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
 
     const head = new Setting(box)
       .setName(cfg.path || 'New folder')
-      .setDesc(isOverride ? (editablePath ? '' : 'Changed from the theme') : 'As the theme draws it');
+      .setDesc(editablePath ? '' : [stage ? stage.label : '', description, isOverride ? 'changed by you' : ''].filter(Boolean).join(' · '));
 
     if (editablePath) {
       head.addText((t) => {
-        t.setPlaceholder('Folder path, e.g. 03 WiP/Clients').setValue(cfg.path)
+        t.setPlaceholder('Folder path, e.g. 02 Inner World/Notes/Clients').setValue(cfg.path)
           .onChange(async (v) => { await onChange({ path: v.trim() }); head.setName(v.trim() || 'New folder'); });
         new FolderSuggest(this.app, t.inputEl, async (path) => { await onChange({ path }); head.setName(path); });
       });
@@ -1160,12 +1633,13 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       b.onClick(() => new IconPicker(this.app, (id) => change({ icon: id.replace(/^lucide-/, '') })).open());
     });
 
+    const palette = this.plugin.palette();
     head.addDropdown((d) => {
       d.addOption('', 'Custom colour');
-      for (const p of PALETTE) d.addOption(p.key, p.name);
-      const current = PALETTE.find((p) => p.ink === cfg.color && p.paper === cfg.colorPaper);
+      for (const p of palette) d.addOption(p.key, p.name);
+      const current = palette.find((p) => p.ink === cfg.color && p.paper === cfg.colorPaper);
       d.setValue(current ? current.key : '')
-        .onChange((v) => { const p = PALETTE.find((x) => x.key === v); if (p) change({ color: p.ink, colorPaper: p.paper }); });
+        .onChange((v) => { const p = palette.find((x) => x.key === v); if (p) change({ color: p.ink, colorPaper: p.paper }); });
     });
     head.addColorPicker((c) => c.setValue(cfg.color || '#888888').onChange((v) => onChange({ color: v })));
     head.addColorPicker((c) => c.setValue(cfg.colorPaper || cfg.color || '#888888').onChange((v) => onChange({ colorPaper: v })));
@@ -1178,7 +1652,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
     if (isOverride) {
       head.addExtraButton((b) => b
         .setIcon(editablePath ? 'trash-2' : 'rotate-ccw')
-        .setTooltip(editablePath ? 'Remove' : 'Reset to the theme')
+        .setTooltip(editablePath ? 'Remove' : 'Reset to the stage colour')
         .onClick(async () => { await onReset(); this.display(); }));
     }
 
@@ -1195,6 +1669,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
 }
 
 /* Reachable for the gates; not a supported surface for other plugins. */
-IcorInterfacePlugin.resolveScaffold = resolveScaffold;
+IcorInterfacePlugin.resolveIcorFolders = resolveIcorFolders;
+IcorInterfacePlugin.buildStageMap = buildStageMap;
 
 module.exports = IcorInterfacePlugin;

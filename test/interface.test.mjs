@@ -31,7 +31,8 @@ const SWITCH_CLASSES = ['icor-hide-ribbon', 'icor-scaffold-chrome', 'icor-hide-b
    renders for them. `icor` decides whether the two ICOR marker rooms exist. */
 function loadPlugin({
   saved = null, icor = true, styleSettings = false, folders = null,
-  explorerLeaf = undefined, leftRibbon = undefined, theme = undefined, customTheme = undefined,
+  explorerLeaf = undefined, schema = undefined, leftRibbon = undefined, theme = undefined, customTheme = undefined,
+  allCollapsed = false, noTree = false, activeFile = 'Notes/a.md', revealWorks = true, deferred = false,
 } = {}) {
   const body = new FakeEl('body');
   /* The host's status bar, with one core item in it, exists before any
@@ -40,10 +41,27 @@ function loadPlugin({
   statusBar.createDiv({ cls: 'status-bar-item plugin-word-count', text: '12 words' });
   const commands = [];
   const explorer = body.createDiv({ cls: 'workspace-leaf-content', attr: { 'data-type': 'file-explorer' } });
+  /* The host's button row, as Obsidian 1.15.1 builds it: its Collapse all button swaps its glyph on a click
+     (chevrons-down-up: collapse; chevrons-up-down: all folded, expand). `deferred` leaves it out until the tab
+     loads; `noTree` is a host with no such button. */
+  const hostCollapse = { folded: allCollapsed, clicks: 0, btn: null };
+  const buildRow = () => {
+    const header = explorer.createDiv({ cls: 'nav-header' });
+    const row = header.createDiv({ cls: 'nav-buttons-container' });
+    row.createDiv({ cls: 'clickable-icon nav-action-button', attr: { 'aria-label': 'New note' } }).createEl('svg', { cls: 'svg-icon lucide-edit' });
+    if (noTree) return row;
+    const btn = row.createDiv({ cls: 'clickable-icon nav-action-button' });
+    const draw = () => { btn.empty(); btn.createEl('svg', { cls: `svg-icon ${hostCollapse.folded ? 'lucide-chevrons-up-down' : 'lucide-chevrons-down-up'}` }); };
+    draw();
+    btn.addEventListener('click', () => { hostCollapse.folded = !hostCollapse.folded; hostCollapse.clicks += 1; draw(); });
+    hostCollapse.btn = btn;
+    return row;
+  };
+  if (!deferred && explorerLeaf !== null) buildRow();
   const tree = explorer.createDiv({ cls: 'nav-files-container' });
 
   const paths = folders || (icor
-    ? ['00 Daily Scratchpad', '03 WiP', '03 WiP/Clients', '06 AI Team', 'Notes', 'Notes/Ideas']
+    ? ['00 Daily Scratchpad', '03 Clients', '03 Clients/Acme', '06 AI Team', 'Notes', 'Notes/Ideas']
     : ['Notes', 'Notes/Ideas', 'Archive']);
 
   const buildRows = () => {
@@ -71,6 +89,9 @@ function loadPlugin({
   /* Every Setting the tab builds, with its toggle's live value and its
      onChange, so a gate can read what the tab SHOWED and drive what it does. */
   const settings = [];
+  /* Every ribbon icon the plugin adds, and every command it runs by id. */
+  const ribbons = [];
+  const ran = [];
   const obsidian = {
     Plugin: class {
       constructor(app, manifest) { this.app = app; this.manifest = manifest; }
@@ -81,6 +102,12 @@ function loadPlugin({
       registerMarkdownPostProcessor() {}
       registerDomEvent() {}
       addCommand(c) { commands.push(c); }
+      addRibbonIcon(icon, title, cb) {
+        const el = body.createDiv({ cls: 'side-dock-ribbon-action', attr: { 'aria-label': title } });
+        el.attrs['data-icon'] = icon;
+        ribbons.push({ icon, title, cb, el });
+        return el;
+      }
       /* the host appends a fresh item at the end of the bar */
       addStatusBarItem() { return statusBar.createDiv({ cls: 'status-bar-item plugin-icor-for-life-interface' }); }
     },
@@ -101,8 +128,29 @@ function loadPlugin({
         fn(t);
         return this;
       }
-      addButton() { return this; } addText() { return this; } addDropdown() { return this; }
-      addExtraButton() { return this; } addColorPicker() { return this; }
+      addText(fn) {
+        const t = { placeholder: '', inputEl: {}, setPlaceholder(p) { t.placeholder = String(p); return t; }, setValue() { return t; }, onChange() { return t; } };
+        this.text = t;
+        fn(t);
+        return this;
+      }
+      /* Dropdown options, button texts and tooltips are words a member reads, so they are recorded too. */
+      addButton(fn) {
+        const b = { text: '', setButtonText(t) { b.text = String(t); return b; }, setCta() { return b; }, onClick() { return b; } };
+        this.button = b; if (fn) fn(b); return this;
+      }
+      addDropdown(fn) {
+        const d = { options: [], value: undefined, cb: null, addOption(k, v) { d.options.push([String(k), String(v)]); return d; }, setValue(v) { d.value = v; return d; }, onChange(cb) { d.cb = cb; return d; } };
+        (this.dropdowns = this.dropdowns || []).push(d); if (fn) fn(d); return this;
+      }
+      addExtraButton(fn) {
+        const b = { tooltip: '', setIcon() { return b; }, setTooltip(t) { b.tooltip = String(t); return b; }, onClick() { return b; } };
+        (this.extraButtons = this.extraButtons || []).push(b); if (fn) fn(b); return this;
+      }
+      addColorPicker(fn) {
+        const c = { value: undefined, setValue(v) { c.value = v; return c; }, onChange() { return c; } };
+        (this.colorPickers = this.colorPickers || []).push(c); if (fn) fn(c); return this;
+      }
     },
     FuzzySuggestModal: class { constructor() {} setPlaceholder() {} },
     AbstractInputSuggest: class { constructor() {} },
@@ -111,6 +159,7 @@ function loadPlugin({
     Platform: { isMobile: false, isDesktop: true },
     TFolder,
     setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
+    setTooltip: (el, text) => { el.attrs['aria-label'] = String(text); },
     getIconIds: () => ['lucide-folder', 'lucide-sprout', 'lucide-bot'],
     getIcon: (id) => ({
       cloneNode: () => ({
@@ -142,7 +191,11 @@ function loadPlugin({
      `explorerLeaf: null` is a vault whose core File explorer is turned off. */
   const leafCalls = [];
   const saveLayoutCalls = { n: 0 };
+  /* `deferred`: a sidebar tab Obsidian has not loaded since start; its row exists only after loadIfDeferred. */
   const makeLeaf = (autoReveal, { legacy = false } = {}) => ({
+    isDeferred: deferred,
+    view: { containerEl: explorer },
+    async loadIfDeferred() { if (this.isDeferred) { this.isDeferred = false; buildRow(); } },
     getViewState: () => {
       const state = { sortOrder: 'alphabetical', showSearch: false, searchQuery: '' };
       /* Obsidian 1.5.0 to 1.8.2: the file explorer predates the setting and
@@ -162,8 +215,17 @@ function loadPlugin({
       : (explorerLeaf === 'legacy' ? makeLeaf(false, { legacy: true }) : makeLeaf(!!explorerLeaf)));
 
   const layoutReady = [];
+  /* `schema`: the vault's _System/schema.json as an object (or a raw string); undefined means the vault has none. */
+  const schemaText = schema === undefined ? null : (typeof schema === 'string' ? schema : JSON.stringify(schema));
   const app = {
-    vault: { getRoot: () => root, ...(theme === undefined ? {} : { getConfig: (k) => (k === 'cssTheme' ? theme : undefined) }) },
+    vault: {
+      getRoot: () => root,
+      adapter: {
+        exists: async (p) => p === '_System/schema.json' && schemaText !== null,
+        read: async (p) => { if (p === '_System/schema.json' && schemaText !== null) return schemaText; throw new Error(`no file ${p}`); },
+      },
+      ...(theme === undefined ? {} : { getConfig: (k) => (k === 'cssTheme' ? theme : undefined) }),
+    },
     ...(customTheme === undefined ? {} : { customCss: { theme: customTheme } }),
     workspace: {
       leftRibbon,
@@ -171,6 +233,16 @@ function loadPlugin({
       on: () => ({}),
       getLeavesOfType: (t) => ((t === 'file-explorer' && leaf) ? [leaf] : []),
       requestSaveLayout: () => { saveLayoutCalls.n += 1; },
+      iterateAllLeaves: () => {},
+      getActiveFile: () => (activeFile ? { path: activeFile } : null),
+    },
+    /* As Obsidian 1.15.1 does: executeCommandById is true for any command that exists, whether it ran or not. */
+    commands: {
+      findCommand: (id) => (id === 'file-explorer:reveal-active-file' && revealWorks ? { id } : null),
+      executeCommandById: (id) => {
+        ran.push(id);
+        return id !== 'file-explorer:reveal-active-file' || revealWorks;
+      },
     },
     metadataCache: { on: () => ({}), getFileCache: () => null },
     plugins: { enabledPlugins: new Set(styleSettings ? ['obsidian-style-settings'] : []) },
@@ -188,7 +260,7 @@ function loadPlugin({
   };
   return {
     plugin, body, explorer, tree, statusBar, commands, buildRows, savedData,
-    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings,
+    notices, leafCalls, saveLayoutCalls, settingTabs, openSettings, ribbons, ran, hostCollapse,
     ready: () => layoutReady.forEach((f) => f()),
   };
 }
@@ -198,15 +270,6 @@ function loadPlugin({
 const row = (tree, path) => tree.querySelectorAll('.nav-folder-title').find((r) => r.getAttribute('data-path') === path) || null;
 
 /* --------------------------------------------------------------- chrome -- */
-
-test('a fresh ICOR vault starts with the ribbon hidden and the chrome reduced', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true });
-  await plugin.onload(); ready();
-  assert.ok(body.classSet.has('icor-hide-ribbon'), 'the ribbon is not hidden in a fresh ICOR vault');
-  assert.ok(body.classSet.has('icor-scaffold-chrome'), 'the chrome is not reduced in a fresh ICOR vault');
-  assert.ok(!body.classSet.has('icor-hide-banner'), 'the banner was hidden by default');
-  assert.ok(!body.classSet.has('icor-rooms-off'), 'the rooms were turned off by default');
-});
 
 test('a fresh vault that is not ICOR starts with nothing hidden', async () => {
   const { plugin, body, ready } = loadPlugin({ icor: false });
@@ -247,7 +310,7 @@ test('with Style Settings installed the plugin never touches the five classes', 
 });
 
 test('unload removes every class it set', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false, showBanner: false, roomIcons: false, handwriting: false } });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false, showBanner: false, roomIcons: false, handwriting: false, ribbonBack: true } });
   await plugin.onload(); ready();
   assert.equal(SWITCH_CLASSES.filter((c) => body.classSet.has(c)).length, 5, 'not every switch applied');
   plugin.onunload();
@@ -271,18 +334,26 @@ test('a configured folder gets the kind and the four properties the theme reads'
     'the icon still says currentColor, which has nothing to inherit inside a data URI');
 });
 
+test('3.0 has no WiP: the folder path a member types into is never shown "03 WiP" as its example', async () => {
+  const { plugin, openSettings } = loadPlugin({ saved: { folders: [{ path: '', kind: 'family', color: '#111111', icon: 'lucide-folder' }] } });
+  await plugin.onload();
+  const shown = openSettings().filter((s) => s.text).map((s) => s.text.placeholder);
+  assert.ok(shown.length, 'no folder path field was drawn for a folder the member added');
+  for (const p of shown) assert.ok(!/WiP/i.test(p), `a placeholder still names WiP: ${p}`);
+});
+
 test('a folder nobody configured is never touched', async () => {
   const { plugin, tree, ready } = loadPlugin({ saved: { folders: [{ path: 'Notes', kind: 'family', color: '#111111', icon: 'lucide-folder' }] } });
   await plugin.onload(); ready();
-  const untouched = row(tree, '03 WiP');
+  const untouched = row(tree, '03 Clients');
   assert.ok(!untouched.hasAttribute('data-icor-kind'), 'an unconfigured ICOR room was claimed; the theme owns it');
   assert.equal(untouched.style.cssText, '', 'an unconfigured row got inline properties');
 });
 
 test('a room with no label gets the folder name minus its sort prefix', async () => {
-  const { plugin, tree, ready } = loadPlugin({ saved: { folders: [{ path: '03 WiP', kind: 'room', color: '#111111', icon: 'lucide-folder' }] } });
+  const { plugin, tree, ready } = loadPlugin({ saved: { folders: [{ path: '03 Clients', kind: 'room', color: '#111111', icon: 'lucide-folder' }] } });
   await plugin.onload(); ready();
-  assert.equal(row(tree, '03 WiP').style.getPropertyValue('--room-label'), '"WiP"');
+  assert.equal(row(tree, '03 Clients').style.getPropertyValue('--room-label'), '"Clients"');
 });
 
 test('kind "none" claims the row and clears every property, so the theme leaves it alone', async () => {
@@ -315,7 +386,7 @@ test('configuration comes back after the host rebuilds the tree', async () => {
 });
 
 test('unload releases every row it claimed', async () => {
-  const { plugin, tree, ready } = loadPlugin({ saved: { folders: [
+  const { plugin, tree, ready } = loadPlugin({ icor: false, saved: { folders: [
     { path: 'Notes', kind: 'room', color: '#111111', icon: 'lucide-folder' },
     { path: 'Notes/Ideas', kind: 'family', color: '#222222', icon: 'lucide-folder' },
   ] } });
@@ -326,69 +397,208 @@ test('unload releases every row it claimed', async () => {
   assert.equal(row(tree, 'Notes').style.cssText, '', 'inline properties outlived the plugin');
 });
 
-/* ------------------------------------------------------------- scaffold -- */
+/* --------------------------------------------------------------- stages --
+ * The ICOR stages colour the top folders (ICOR stages contract, Tom
+ * 2026-11-23): Input 00 Daily Notes, 01 Inbox; Control 02 Inner World,
+ * 03 Outer World, 04 Assets, 05 Databases; Output 06 Planner; Refine has no
+ * folder. The colour comes from the vault's _System/schema.json `stages`, and
+ * from a built-in map with the same values when the schema has none. Folders
+ * are matched by their full name, never by the number in front. */
 
-test('the scaffold list resolves rooms by prefix, so a renamed room is still listed', async () => {
-  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Scratchpad', '04 Somewhere Else', '04 Somewhere Else/Journal', '06 AI Team', '07 Data', 'Notes'] });
+const NEW_LAYOUT = ['00 Daily Notes', '01 Inbox', '02 Inner World', '02 Inner World/Journal', '02 Inner World/Journal/2026',
+  '03 Outer World', '04 Assets', '04 Assets/Images', '05 Databases', '06 Planner', 'Notes'];
+const STAGES = (colors = {}) => ({
+  input: { label: 'Input', color: colors.input || '#5271FC', folders: ['00 Daily Notes', '01 Inbox'] },
+  control: { label: 'Control', color: colors.control || '#52F49A', folders: ['02 Inner World', '03 Outer World', '04 Assets', '05 Databases'] },
+  output: { label: 'Output', color: colors.output || '#FD63FF', folders: ['06 Planner'] },
+  refine: { label: 'Refine', folders: [], about: 'no folder: the plugins (AI Chat, Connect, Focus) and the weekly review' },
+});
+const FOLDER_NOTES = {
+  '00 Daily Notes': 'your raw writing, one note a day',
+  '01 Inbox': 'anything not yet sorted',
+  '02 Inner World': 'what you know and who you know',
+  '03 Outer World': 'what others made',
+  '04 Assets': 'files only',
+  '05 Databases': 'Objects.base and data too large for notes',
+  '06 Planner': 'tasks synced from your task apps',
+};
+const STAGE_OF = {
+  '00 Daily Notes': 'input', '01 Inbox': 'input',
+  '02 Inner World': 'control', '03 Outer World': 'control', '04 Assets': 'control', '05 Databases': 'control',
+  '06 Planner': 'output',
+};
+const color = (r) => r.style.getPropertyValue('--room-color').toLowerCase();
+
+test('each new top folder gets its stage colour from the schema\'s stages, with an icon and its name minus the number', async () => {
+  /* Colours the built-in map does not have, so the only way to get them is to have read the schema. */
+  const mine = { input: '#123456', control: '#00aa55', output: '#aa00aa' };
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { schema: 1, folders: FOLDER_NOTES, stages: STAGES(mine) } });
   await plugin.onload(); ready();
-  const rows = plugin.constructor.resolveScaffold(plugin.app);
-  const paths = rows.map((r) => r.path);
-  assert.ok(paths.includes('04 Somewhere Else'), `the renamed Inner World room is not listed: ${paths}`);
-  assert.ok(paths.includes('04 Somewhere Else/Journal'), 'the Journal subfolder under the renamed room is not listed');
-  assert.ok(!paths.some((p) => p.startsWith('05 ')), 'a room that does not exist in this vault was listed anyway');
-  const inner = rows.find((r) => r.path === '04 Somewhere Else');
+  for (const [path, stage] of Object.entries(STAGE_OF)) {
+    const r = row(tree, path);
+    assert.equal(r.getAttribute('data-icor-kind'), 'room', `${path} is not drawn as a top folder`);
+    assert.equal(color(r), mine[stage], `${path} does not carry the ${stage} colour from the schema`);
+    assert.ok(r.style.getPropertyValue('--room-color-paper'), `${path} has no paper colour`);
+    assert.match(r.style.getPropertyValue('--room-icon'), /^url\("data:image\/svg\+xml,/, `${path} has no icon`);
+    assert.equal(r.style.getPropertyValue('--room-label'), JSON.stringify(path.replace(/^\d{2} /, '')), `${path} is not labelled by its name`);
+    assert.equal(r.getAttribute('data-icor-stage'), stage, `${path} does not say which stage it belongs to`);
+  }
+  assert.ok(!row(tree, 'Notes').hasAttribute('data-icor-kind'), 'a folder in no stage was claimed');
+});
+
+test('a folder inside a stage folder takes the stage colour; a date folder does not', async () => {
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { folders: FOLDER_NOTES, stages: STAGES({ control: '#00aa55' }) } });
+  await plugin.onload(); ready();
+  const journal = row(tree, '02 Inner World/Journal');
+  assert.equal(journal.getAttribute('data-icor-kind'), 'family');
+  assert.equal(color(journal), '#00aa55', 'Journal does not carry its stage\'s colour');
+  assert.match(journal.style.getPropertyValue('--room-icon'), /notebook-pen/, 'Journal lost its own icon');
+  assert.ok(!row(tree, '02 Inner World/Journal/2026').hasAttribute('data-icor-kind'), 'a date folder was coloured');
+});
+
+test('a schema without stages falls back to the built-in stage map', async () => {
+  for (const schema of [{ schema: 1, folders: FOLDER_NOTES }, undefined, 'not json at all']) {
+    const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema });
+    await plugin.onload(); ready();
+    const want = { input: '#5271fc', control: '#52f49a', output: '#fd63ff' };
+    for (const [path, stage] of Object.entries(STAGE_OF)) {
+      assert.equal(color(row(tree, path)), want[stage], `${path} is not ${stage} with schema ${JSON.stringify(schema)}`);
+    }
+  }
+});
+
+test('a legacy schema that still says "rooms" works: its folders are coloured by stage and its descriptions shown', async () => {
+  const legacy = ['00 Daily Scratchpad', '01 Inbox', '02 Planner', '04 Inner World', '05 Assets', '06 Outer World', '07 Databases'];
+  const { plugin, tree, ready, openSettings } = loadPlugin({
+    folders: legacy,
+    schema: { schema: 1, rooms: { '04 Inner World': 'what you know and who you know', '02 Planner': 'tasks synced from your task apps' } },
+  });
+  await plugin.onload(); ready();
+  assert.equal(color(row(tree, '04 Inner World')), '#52f49a', 'the Inner World of a vault before the stage layout is not Control');
+  assert.equal(color(row(tree, '02 Planner')), '#fd63ff', 'the Planner of a vault before the stage layout is not Output');
+  assert.equal(color(row(tree, '00 Daily Scratchpad')), '#5271fc');
+  const descs = openSettings().map((x) => x.desc).join('\n');
+  assert.match(descs, /what you know and who you know/, 'the description from "rooms" is not shown with its folder');
+});
+
+test('"06 AI Team" (2.x) is never coloured as Output: folders match by full name, not by number', async () => {
+  for (const schema of [{ folders: FOLDER_NOTES, stages: STAGES() }, undefined]) {
+    const { plugin, tree, ready } = loadPlugin({ folders: ['06 AI Team', '06 AI Team/Agents', '06 Planner', '03 WiP', '02 Somewhere Else'], schema });
+    await plugin.onload(); ready();
+    for (const p of ['06 AI Team', '06 AI Team/Agents', '03 WiP', '02 Somewhere Else']) {
+      const r = row(tree, p);
+      assert.ok(!r.hasAttribute('data-icor-kind'), `${p} was claimed for a stage`);
+      assert.equal(r.style.cssText, '', `${p} carries a colour`);
+    }
+    assert.equal(color(row(tree, '06 Planner')), '#fd63ff');
+  }
+});
+
+test('a member\'s own folder settings win over the stage colour', async () => {
+  const { plugin, tree, ready } = loadPlugin({
+    folders: NEW_LAYOUT,
+    schema: { folders: FOLDER_NOTES, stages: STAGES() },
+    saved: { folders: [
+      { path: '02 Inner World', kind: 'room', color: '#ff0000', colorPaper: '#880000', icon: 'heart', label: 'Mine' },
+      { path: '06 Planner', kind: 'none' },
+    ] },
+  });
+  await plugin.onload(); ready();
+  const inner = row(tree, '02 Inner World');
+  assert.equal(color(inner), '#ff0000', 'the stage colour beat the member\'s');
+  assert.equal(inner.style.getPropertyValue('--room-label'), '"Mine"');
+  const planner = row(tree, '06 Planner');
+  assert.equal(planner.getAttribute('data-icor-kind'), 'none', 'the member switched the Planner off and it is still drawn');
+  assert.equal(planner.style.cssText, '');
+  assert.equal(color(row(tree, '03 Outer World')), '#52f49a', 'the folders the member left alone lost their stage colour');
+});
+
+test('a schema colour that is not a colour never reaches the row', async () => {
+  const bad = STAGES({ input: 'red;} body{display:none' });
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { stages: bad } });
+  await plugin.onload(); ready();
+  const v = color(row(tree, '00 Daily Notes'));
+  assert.ok(!/[;{}]/.test(v), `a schema value went into the style as written: ${v}`);
+  assert.equal(v, '#5271fc', 'a broken stage colour does not fall back to the built-in one');
+});
+
+test('no member-visible settings text says room, scaffold, local folder, full stack or harness', async () => {
+  const { plugin, ready, openSettings } = loadPlugin({
+    folders: NEW_LAYOUT,
+    schema: { folders: FOLDER_NOTES, stages: STAGES() },
+    saved: { folders: [{ path: 'Notes', kind: 'room', color: '#111111', icon: 'folder' }, { path: '02 Inner World', kind: 'family', color: '#222222' }] },
+  });
+  await plugin.onload(); ready();
+  const words = [];
+  for (const x of openSettings()) {
+    words.push(x.name, x.desc);
+    if (x.text) words.push(x.text.placeholder);
+    if (x.button) words.push(x.button.text);
+    for (const d of x.dropdowns || []) for (const [, label] of d.options) words.push(label);
+    for (const b of x.extraButtons || []) words.push(b.tooltip);
+  }
+  assert.ok(words.length > 30, 'the settings tab drew almost nothing; the check would pass on an empty tab');
+  const bad = words.filter((w) => /\brooms?\b|scaffold|local folder|full stack|harness/i.test(w));
+  assert.deepEqual(bad, [], 'settings text a member reads uses a word it must not');
+  assert.ok(words.some((w) => /\bstage/i.test(w)), 'the settings never mention the ICOR stages');
+});
+
+test('the ICOR folder list shows the stage folders that exist, by full name, starting from the stage colour', async () => {
+  const { plugin, ready } = loadPlugin({ folders: ['00 Daily Notes', '02 Inner World', '02 Inner World/Journal', '06 AI Team', 'Notes'] });
+  await plugin.onload(); ready();
+  const rows = plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap);
+  const paths = Array.from(rows, (r) => r.path);
+  assert.deepEqual(paths.sort(), ['00 Daily Notes', '02 Inner World', '02 Inner World/Journal'], `listed: ${paths}`);
+  const inner = rows.find((r) => r.path === '02 Inner World');
   assert.equal(inner.defaults.kind, 'room');
-  assert.equal(inner.defaults.color, '#7d9a7f', 'Inner World does not show the theme\'s own green');
+  assert.equal(inner.defaults.color.toLowerCase(), '#52f49a');
   assert.equal(inner.defaults.icon, 'sprout');
   assert.equal(inner.defaults.label, 'Inner World');
-  /* Room 07 keys on its prefix too: "07 Data" (the private-vault name) still
-   * resolves to the Databases room with the theme's own rose. */
-  const databases = rows.find((r) => r.path === '07 Data');
-  assert.ok(databases, `the 07 room is not listed: ${paths}`);
-  assert.equal(databases.defaults.kind, 'room');
-  assert.equal(databases.defaults.color, '#b57a86', 'room 07 does not show the theme\'s own rose ink');
-  assert.equal(databases.defaults.colorPaper, '#8f5560', 'room 07 does not show the theme\'s own rose paper');
-  assert.equal(databases.defaults.icon, 'database');
-  assert.equal(databases.defaults.label, 'Databases');
+  assert.equal(inner.stage.key, 'control');
 });
 
-test('editing a scaffold folder stores an override starting from the theme\'s values', async () => {
-  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['04 Inner World', '04 Inner World/Journal', '00 Daily Scratchpad', '06 AI Team'] });
+test('editing a stage folder stores an override starting from the stage\'s values', async () => {
+  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['02 Inner World', '02 Inner World/Journal', '00 Daily Notes'] });
   await plugin.onload(); ready();
-  const rows = plugin.constructor.resolveScaffold(plugin.app);
-  const journal = rows.find((r) => r.path === '04 Inner World/Journal');
+  const journal = plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap).find((r) => r.path === '02 Inner World/Journal');
   await plugin.overrideFolder(journal.defaults, { color: '#ff0000' });
-
-  const stored = savedData.value.folders.find((f) => f.path === '04 Inner World/Journal');
+  const stored = savedData.value.folders.find((f) => f.path === '02 Inner World/Journal');
   assert.ok(stored, 'no override was stored');
   assert.equal(stored.color, '#ff0000', 'the change was not stored');
-  assert.equal(stored.icon, 'notebook-pen', 'the override lost the theme\'s icon; changing one thing changed two');
-  assert.equal(stored.colorPaper, '#7f662f', 'the override lost the theme\'s paper colour');
-  const r = row(tree, '04 Inner World/Journal');
-  assert.equal(r.getAttribute('data-icor-kind'), 'family', 'the row was not claimed after the override');
-  assert.equal(r.style.getPropertyValue('--room-color'), '#ff0000');
+  assert.equal(stored.icon, 'notebook-pen', 'the override lost its icon; changing one thing changed two');
+  assert.ok(stored.colorPaper, 'the override lost the paper colour');
+  const r = row(tree, '02 Inner World/Journal');
+  assert.equal(r.getAttribute('data-icor-kind'), 'family');
+  assert.equal(color(r), '#ff0000');
 });
 
-test('resetting a scaffold folder removes the override and releases the row to the theme', async () => {
-  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['04 Inner World', '00 Daily Scratchpad', '06 AI Team'] });
+test('resetting a stage folder removes the override and gives it its stage colour back', async () => {
+  const { plugin, tree, ready, savedData } = loadPlugin({ folders: ['02 Inner World', '00 Daily Notes'] });
   await plugin.onload(); ready();
-  const inner = plugin.constructor.resolveScaffold(plugin.app).find((r) => r.path === '04 Inner World');
-  await plugin.overrideFolder(inner.defaults, { icon: 'heart' });
-  assert.ok(row(tree, '04 Inner World').hasAttribute('data-icor-kind'), 'not claimed to begin with');
-
-  await plugin.resetFolder('04 Inner World');
+  const inner = plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap).find((r) => r.path === '02 Inner World');
+  await plugin.overrideFolder(inner.defaults, { color: '#ff0000' });
+  assert.equal(color(row(tree, '02 Inner World')), '#ff0000');
+  await plugin.resetFolder('02 Inner World');
   assert.equal(savedData.value.folders.length, 0, 'the override survived the reset');
-  const r = row(tree, '04 Inner World');
-  assert.ok(!r.hasAttribute('data-icor-kind'), 'the row was not released to the theme');
-  assert.equal(r.style.cssText, '', 'inline properties survived the reset');
+  assert.equal(color(row(tree, '02 Inner World')), '#52f49a', 'the reset did not bring the stage colour back');
 });
 
-test('only what the user changed is stored: an untouched scaffold list stores nothing', async () => {
-  const { plugin, ready, savedData } = loadPlugin({ icor: true });
+test('only what the member changed is stored: stage colours are never written to settings', async () => {
+  const { plugin, ready, savedData } = loadPlugin({ folders: NEW_LAYOUT, schema: { stages: STAGES() } });
   await plugin.onload(); ready();
-  plugin.constructor.resolveScaffold(plugin.app);
-  assert.ok(!savedData.value || !savedData.value.folders || savedData.value.folders.length === 0,
-    'listing the scaffold wrote overrides for it; the theme is the source of truth and the plugin must store only changes');
+  plugin.constructor.resolveIcorFolders(plugin.app, plugin.stageMap);
+  await plugin.saveSettings();
+  assert.ok(!savedData.value.folders || savedData.value.folders.length === 0,
+    'the stage colours were stored as overrides; the schema is where they live');
+});
+
+test('unload takes the stage colours off every row', async () => {
+  const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT });
+  await plugin.onload(); ready();
+  assert.ok(tree.querySelectorAll('[data-icor-managed]').length >= 7, 'the stage folders were not claimed');
+  plugin.onunload();
+  assert.equal(tree.querySelectorAll('[data-icor-managed]').length, 0);
+  assert.ok(!row(tree, '02 Inner World').hasAttribute('data-icor-stage'), 'the stage attribute outlived the plugin');
 });
 
 /* ------------------------------------------------------------ positives -- */
@@ -405,7 +615,7 @@ test('every switch reads as ON in a plain vault, and the body carries no theme c
 });
 
 test('settings saved by 0.5.x with the old negative keys migrate by inversion', async () => {
-  const { plugin, body, ready, savedData } = loadPlugin({ saved: { hideRibbon: true, reduceChrome: false, hideBanner: true, roomsOff: false, noHand: true, tocEnabled: true, tocDepth: 2 } });
+  const { plugin, body, ready, savedData } = loadPlugin({ saved: { ribbonBack: true, hideRibbon: true, reduceChrome: false, hideBanner: true, roomsOff: false, noHand: true, tocEnabled: true, tocDepth: 2 } });
   await plugin.onload(); ready();
   assert.equal(plugin.settings.showRibbon, false, 'hideRibbon:true did not become showRibbon:false');
   assert.equal(plugin.settings.showControls, true, 'reduceChrome:false did not become showControls:true');
@@ -427,7 +637,7 @@ const ribbonRow = (open) => open().find((s) => s.name === 'Left ribbon');
 
 test('the ribbon class is set even on a host whose ribbon has a toggle, and the toggle is never called', async () => {
   const calls = [];
-  const { plugin, body, ready } = loadPlugin({ icor: true, leftRibbon: { toggle: (v) => calls.push(v) } });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true }, leftRibbon: { toggle: (v) => calls.push(v) } });
   await plugin.onload(); ready();
   assert.ok(body.classSet.has('icor-hide-ribbon'), 'the class is what the theme and the fallback rule read');
   plugin.settings.showRibbon = true;
@@ -437,7 +647,7 @@ test('the ribbon class is set even on a host whose ribbon has a toggle, and the 
 });
 
 test('turning the switch back on and unloading both bring the ribbon back', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true } });
   await plugin.onload(); ready();
   assert.ok(body.classSet.has('icor-hide-ribbon'));
   plugin.settings.showRibbon = true;
@@ -471,7 +681,8 @@ test('the ribbon hint shows when the ribbon is hidden on another theme, and only
     [{}, false],
     [{ theme: 42 }, false],
   ]) {
-    const { plugin, openSettings, ready } = loadPlugin({ icor: true, ...opts });
+    /* A member who switched the ribbon off (0.10.2: a first run no longer does). */
+    const { plugin, openSettings, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true }, ...opts });
     await plugin.onload(); ready();
     const { desc } = ribbonRow(openSettings);
     assert.equal(desc.includes('INKLINE is not the active theme'), shown, JSON.stringify(opts));
@@ -480,7 +691,7 @@ test('the ribbon hint shows when the ribbon is hidden on another theme, and only
 });
 
 test('the ribbon hint follows the switch and raises no notice', async () => {
-  const { plugin, openSettings, notices, ready } = loadPlugin({ icor: true, theme: 'Minimal' });
+  const { plugin, openSettings, notices, ready } = loadPlugin({ icor: true, theme: 'Minimal', saved: { showRibbon: false, ribbonBack: true } });
   await plugin.onload(); ready();
   const row = ribbonRow(openSettings);
   assert.match(row.desc, /INKLINE is not the active theme/);
@@ -492,7 +703,7 @@ test('the ribbon hint follows the switch and raises no notice', async () => {
 });
 
 test('with Style Settings on, this plugin still leaves the ribbon class alone', async () => {
-  const { plugin, body, ready } = loadPlugin({ icor: true, styleSettings: true, theme: 'Minimal' });
+  const { plugin, body, ready } = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true }, styleSettings: true, theme: 'Minimal' });
   await plugin.onload(); ready();
   assert.ok(!body.classSet.has('icor-hide-ribbon'));
 });
@@ -853,4 +1064,256 @@ test('the auto-reveal gates are measuring a real leaf', async () => {
   await plugin.onload(); ready();
   assert.equal(plugin.autoRevealState(), true,
     'the fixture leaf reports nothing, so every assertion above is about a plugin talking to no one');
+});
+
+/* ------------------------------------------------- look, _System, properties -- */
+
+test('by default the Look is gradient, _System is hidden and the properties stay on top', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  assert.ok(body.classList.contains('inkline-gradient'), 'the gradient Look class is missing');
+  assert.ok(!body.classList.contains('inkline-flat'), 'both Look classes are on');
+  assert.ok(body.classList.contains('icor-hide-system'), '_System is not hidden by default');
+  assert.ok(!body.classList.contains('icor-props-bottom') && !body.classList.contains('icor-props-folding'), 'the properties moved without being asked');
+});
+
+test('properties under the note put one class on body, and unload takes it off', async () => {
+  const { plugin, body, ready } = loadPlugin({ saved: { properties: 'bottom', look: 'flat', showSystem: true } });
+  await plugin.onload(); ready();
+  assert.ok(body.classList.contains('icor-props-bottom'));
+  assert.ok(body.classList.contains('inkline-flat') && !body.classList.contains('inkline-gradient'));
+  assert.ok(!body.classList.contains('icor-hide-system'), '_System is hidden although the member shows it');
+  plugin.onunload();
+  for (const c of ['icor-props-bottom', 'inkline-flat', 'icor-hide-system']) assert.ok(!body.classList.contains(c), `${c} stayed after unload`);
+});
+
+test('an ICOR for Life 3.0 vault keeps the ribbon and the file controls on first run', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  plugin.app.vault.getAbstractFileByPath = (p) => (p === '_System/schema.json' ? {} : null);
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.showRibbon, true, 'the 3.0 README sends members to the ribbon, and it was hidden');
+  assert.equal(plugin.settings.showControls, true);
+  assert.ok(!body.classList.contains('icor-hide-ribbon'));
+});
+
+test('the Look, _System and the properties come over once from Objects, where they lived before 0.9.0', async () => {
+  const { plugin, body, ready, savedData } = loadPlugin({ icor: true });
+  plugin.app.vault.configDir = '.obsidian';
+  plugin.app.vault.adapter = {
+    exists: async (p) => p === '.obsidian/plugins/icor-for-life-objects/data.json',
+    read: async () => JSON.stringify({ look: 'flat', showSystem: true, properties: 'collapsed', mentions: true }),
+  };
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.look, 'flat');
+  assert.equal(plugin.settings.showSystem, true);
+  assert.equal(plugin.settings.properties, 'collapsed');
+  assert.ok(body.classList.contains('inkline-flat'));
+  assert.equal(savedData.value.properties, 'collapsed', 'the import was not saved, so it would run again');
+  assert.ok(!('mentions' in savedData.value), 'a setting that is still Objects\' came along');
+});
+
+test('hidden in notes is Obsidian\'s own switch: set to Hidden, and back to Visible when the member picks another place', async () => {
+  const { plugin, ready } = loadPlugin({ saved: { properties: 'sidebar' } });
+  const config = { propertiesInDocument: 'visible' };
+  plugin.app.vault.getConfig = (k) => config[k];
+  plugin.app.vault.setConfig = (k, v) => { config[k] = v; };
+  await plugin.onload(); ready();
+  assert.equal(config.propertiesInDocument, 'hidden');
+  plugin.settings.properties = 'top';
+  await plugin.saveSettings();
+  assert.equal(config.propertiesInDocument, 'visible');
+});
+
+test('when Obsidian\'s own switch says Hidden, the setting here says so too', async () => {
+  const { plugin, ready } = loadPlugin({ saved: { properties: 'top' } });
+  plugin.app.vault.getConfig = (k) => (k === 'propertiesInDocument' ? 'hidden' : undefined);
+  plugin.app.vault.setConfig = () => {};
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.properties, 'sidebar');
+});
+
+/* Tom, 2026-11-23: every ICOR for Life plugin keeps its launcher in Obsidian's ribbon now, so the ribbon is never hidden
+   for them, and a ribbon an earlier first run hid comes back, once. */
+test('a 2.x ICOR vault keeps the ribbon and the file controls on first run too', async () => {
+  const { plugin, body, ready } = loadPlugin({ icor: true });
+  await plugin.onload(); ready();
+  assert.equal(plugin.settings.showRibbon, true, 'the launchers live in the ribbon, and it was hidden');
+  assert.equal(plugin.settings.showControls, true);
+  assert.ok(!body.classList.contains('icor-hide-ribbon'));
+});
+
+test('a ribbon an earlier version hid comes back once, and stays as the member sets it after', async () => {
+  const first = loadPlugin({ icor: true, saved: { showRibbon: false, showControls: false } });
+  await first.plugin.onload(); first.ready();
+  assert.equal(first.plugin.settings.showRibbon, true, 'the hidden ribbon did not come back');
+  assert.equal(first.savedData.value.ribbonBack, true, 'the return was not saved, so it would run again');
+  const later = loadPlugin({ icor: true, saved: { showRibbon: false, ribbonBack: true } });
+  await later.plugin.onload(); later.ready();
+  assert.equal(later.plugin.settings.showRibbon, false, 'a ribbon the member hid afterwards came back again');
+});
+
+test('the switches no longer say the actions moved to the file-tree toolbar', () => {
+  assert.doesNotMatch(source, /routes every action it carried to the file-tree toolbar|reroutes all four and ships this off/);
+});
+
+/* ------------------------------------------ the file explorer's buttons --
+ * 0.11.0 (Tom, 2026-11-23): the explorer's button row hidden by default, one
+ * body class, CSS in styles.css; Collapse all and reveal-the-open-note in the
+ * left ribbon; a setting brings the row back. */
+const EXPLORER_CLASS = 'icor-hide-explorer-buttons';
+const explorerRow = (open) => open().find((s) => s.name === "Show Obsidian's file explorer buttons");
+
+test('the explorer\'s button row is hidden by default, in any vault', async () => {
+  for (const icor of [true, false]) {
+    const { plugin, body, ready } = loadPlugin({ icor });
+    await plugin.onload(); ready();
+    assert.ok(body.classSet.has(EXPLORER_CLASS), `icor=${icor}: the row was not hidden`);
+  }
+});
+
+test('the setting brings Obsidian\'s row back and hides it again; unload gives it back', async () => {
+  const { plugin, body, ready, openSettings, savedData } = loadPlugin({ saved: { ribbonBack: true } });
+  await plugin.onload(); ready();
+  const row = explorerRow(openSettings);
+  assert.ok(row && row.toggle, 'no setting for the row');
+  assert.equal(row.toggle.value, false, 'the setting is off by default');
+  assert.match(row.desc, /left ribbon/);
+  await row.toggle.cb(true);
+  assert.ok(!body.classSet.has(EXPLORER_CLASS), 'turning it on did not bring the row back');
+  assert.equal(savedData.value.showExplorerButtons, true);
+  await explorerRow(openSettings).toggle.cb(false);
+  assert.ok(body.classSet.has(EXPLORER_CLASS));
+  plugin.onunload();
+  assert.ok(!body.classSet.has(EXPLORER_CLASS), 'unload left the row hidden');
+});
+
+test('a saved choice to show the row is kept, and Style Settings does not take the class over', async () => {
+  const shown = loadPlugin({ saved: { ribbonBack: true, showExplorerButtons: true } });
+  await shown.plugin.onload(); shown.ready();
+  assert.ok(!shown.body.classSet.has(EXPLORER_CLASS));
+  const ss = loadPlugin({ styleSettings: true });
+  await ss.plugin.onload(); ss.ready();
+  assert.ok(ss.body.classSet.has(EXPLORER_CLASS), 'the class is this plugin\'s, not one of the five theme switches');
+});
+
+test('two ribbon icons, each with a tooltip that says what it does', async () => {
+  const { plugin, ribbons, ready } = loadPlugin();
+  await plugin.onload(); ready();
+  const titles = ribbons.map((r) => r.title);
+  assert.deepEqual(titles, ['Collapse all folders', 'Show the open note in the file tree']);
+  for (const r of ribbons) assert.match(r.title, /^[A-Z][a-z]/);
+});
+
+test('Collapse all presses the host\'s own button, and the icon then offers to expand', async () => {
+  const { plugin, ribbons, hostCollapse, ready } = loadPlugin();
+  await plugin.onload(); ready();
+  const [collapse] = ribbons;
+  await collapse.cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(hostCollapse.clicks, 1);
+  assert.equal(hostCollapse.folded, true);
+  assert.equal(collapse.el.getAttribute('aria-label'), 'Expand all folders');
+  assert.equal(collapse.el.attrs['data-icon'], 'chevrons-up-down');
+  await collapse.cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(hostCollapse.clicks, 2);
+  assert.equal(hostCollapse.folded, false);
+  assert.equal(collapse.el.getAttribute('aria-label'), 'Collapse all folders');
+  assert.equal(collapse.el.attrs['data-icon'], 'chevrons-down-up');
+});
+
+test('a tree that starts folded shows Expand on load', async () => {
+  const { plugin, ribbons, ready } = loadPlugin({ allCollapsed: true });
+  await plugin.onload(); ready();
+  assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Expand all folders');
+});
+
+test('the collapse command withdraws without a file tree, and a tree that cannot fold says what to do', async () => {
+  const off = loadPlugin({ explorerLeaf: null });
+  await off.plugin.onload(); off.ready();
+  const cmd = off.commands.find((c) => c.id === 'collapse-all-folders');
+  assert.ok(cmd, 'no collapse command');
+  assert.equal(cmd.checkCallback(true), false);
+  await off.ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.match(off.notices.join(' '), /file explorer core plugin/);
+  const old = loadPlugin({ noTree: true });
+  await old.plugin.onload(); old.ready();
+  await old.ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.match(old.notices.join(' '), /no collapse button/);
+});
+
+test('Show the open note runs Obsidian\'s own reveal command, and says why when it cannot', async () => {
+  const ok = loadPlugin();
+  await ok.plugin.onload(); ok.ready();
+  ok.ribbons[1].cb();
+  assert.deepEqual(ok.ran, ['file-explorer:reveal-active-file']);
+  assert.deepEqual(ok.notices, []);
+  const none = loadPlugin({ activeFile: null });
+  await none.plugin.onload(); none.ready();
+  none.ribbons[1].cb();
+  assert.match(none.notices.join(' '), /Open a note first/);
+  assert.deepEqual(none.ran, [], 'nothing runs without an open note (the host would answer true anyway)');
+  const off = loadPlugin({ revealWorks: false });
+  await off.plugin.onload(); off.ready();
+  off.ribbons[1].cb();
+  assert.match(off.notices.join(' '), /file explorer core plugin/);
+  assert.deepEqual(off.ran, []);
+});
+
+test('the row is only hidden: under the class, in the file explorer, the header (and the banner) stays', () => {
+  const css = readFileSync(resolve(repo, 'styles.css'), 'utf8');
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(([, sel]) => /nav-buttons-container|nav-header/.test(sel));
+  assert.equal(rules.length, 1, 'one rule, no more');
+  const [, sel, decl] = rules[0];
+  assert.equal(sel.trim().split('\n').pop().trim(), 'body.icor-hide-explorer-buttons .workspace-leaf-content[data-type="file-explorer"] .nav-header > .nav-buttons-container');
+  assert.match(decl, /^\s*display:\s*none;\s*$/);
+});
+
+test('nothing is written into the explorer\'s button row: it is only read and its own button pressed', async () => {
+  /* The source: the row is named once, as a selector, and used only by document.querySelector. */
+  assert.equal((source.match(/nav-buttons-container/g) || []).length, 1, 'the row is named in one place');
+  assert.match(source, /const EXPLORER_ROW = '\.nav-buttons-container';/);
+  assert.equal((source.match(/EXPLORER_ROW/g) || []).length, 2, 'declared, and read in one place');
+  assert.match(source, /root\.querySelector\(EXPLORER_ROW\)/);
+  assert.doesNotMatch(source, /nav-action-button|addNavButton/);
+  /* The behaviour: load, both icons, the setting both ways, unload; the row has the same classes, attributes and
+     children (the host's own glyph swap aside) as the host built it. */
+  const { plugin, explorer, ribbons, ready, openSettings } = loadPlugin();
+  const row = explorer.querySelector('.nav-buttons-container');
+  const snap = () => JSON.stringify({ cls: [...row.classSet].sort(), attrs: row.attrs, kids: row.children.map((c) => [[...c.classSet].sort(), c.attrs]) });
+  const before = snap();
+  await plugin.onload(); ready();
+  await ribbons[0].cb(); await ribbons[0].cb(); ribbons[1].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  await explorerRow(openSettings).toggle.cb(true);
+  await explorerRow(openSettings).toggle.cb(false);
+  plugin.onunload();
+  assert.equal(snap(), before, 'the row was changed');
+});
+
+test('a file tree Obsidian had not loaded yet is never unfolded by a press that offered Collapse', async () => {
+  /* Measured in the demo vault, 2026-11-23: the tab was deferred, the icon said Collapse, the tree loaded all folded,
+     and the press expanded. Now the tree stays folded and the icon catches up. */
+  const { plugin, ribbons, hostCollapse, ready, commands } = loadPlugin({ deferred: true, allCollapsed: true });
+  await plugin.onload(); ready();
+  assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Collapse all folders', 'nothing to read yet: the icon offers Collapse');
+  await ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(hostCollapse.clicks, 0, 'already folded, as the icon offered: nothing pressed');
+  assert.equal(hostCollapse.folded, true);
+  assert.equal(ribbons[0].el.getAttribute('aria-label'), 'Expand all folders');
+  await commands.find((c) => c.id === 'collapse-all-folders').checkCallback(false);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(hostCollapse.folded, false, 'from then on the host\'s button decides');
+});
+
+test('a deferred tree that is not folded yet is folded by the press that loads it', async () => {
+  const { plugin, ribbons, hostCollapse, ready } = loadPlugin({ deferred: true, allCollapsed: false });
+  await plugin.onload(); ready();
+  await ribbons[0].cb();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(hostCollapse.clicks, 1);
+  assert.equal(hostCollapse.folded, true);
 });

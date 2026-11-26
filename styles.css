@@ -1,8 +1,9 @@
 /* ICOR for Life - Interface.
    The chrome switches and the folder rows are drawn by the INKLINE theme.
-   This file carries the four things that must work on any theme: a fallback
-   for the ribbon switch, the Outline depth rules, the diagram viewer and the
-   collapsible status bar, plus the settings tab's own controls. */
+   This file carries the five things that must work on any theme: a fallback
+   for the ribbon switch, the file explorer's button row, the Outline depth
+   rules, the diagram viewer and the collapsible status bar, plus the settings
+   tab's own controls. */
 
 /* ----------------------------------------------------------- ribbon hiding --
    INKLINE's own two rules for the `icor-hide-ribbon` switch, repeated so the
@@ -17,6 +18,19 @@ body.icor-hide-ribbon .workspace-ribbon.mod-left {
    without this the sidebar toggle slides under the macOS window buttons. */
 body.mod-macos.is-frameless:not(.is-fullscreen).icor-hide-ribbon {
   --frame-left-space: 80px;
+}
+
+/* ------------------------------------------- the file explorer's buttons --
+   0.11.0 (Tom, 2026-11-23): the row of buttons above the file tree is hidden
+   while the plugin sets `icor-hide-explorer-buttons` (Settings, ICOR
+   Interface, "Show Obsidian's file explorer buttons", off by default). Only
+   the row goes: the header above it, where INKLINE paints the banner, stays.
+   Nothing is written into the row and nothing is moved out of it, so taking
+   the class off (the setting, or turning the plugin off) is Obsidian's row
+   exactly as it was. Collapse all and reveal-the-open-note are in the left
+   ribbon instead. */
+body.icor-hide-explorer-buttons .workspace-leaf-content[data-type="file-explorer"] .nav-header > .nav-buttons-container {
+  display: none;
 }
 
 .icor-if-icon-suggestion {
@@ -131,6 +145,8 @@ body.mod-macos.is-frameless:not(.is-fullscreen).icor-hide-ribbon {
 /* ------------------------------------------------------------ modal */
 
 .icor-diag-container { padding: 0; }
+/* The viewer draws the diagram at its natural size; it pans and zooms. */
+.icor-diag-holder > svg { max-width: none; }
 
 .modal.icor-diag-modal {
   width: 100vw;
@@ -314,3 +330,33 @@ body.icor-status-bar-collapsed .icor-status-bar-expand:focus-visible {
 body.is-mobile .icor-status-bar-zone {
   display: none;
 }
+
+/* ---------------------------------------------------------------- _System --
+   The schema, templates, skills and tools: needed on every device, rarely opened by hand. Works on any theme. */
+body.icor-hide-system .nav-folder:has(> .nav-folder-title[data-path="_System"]) { display: none; }
+
+/* ------------------------------------------------------------ properties --
+   Folded on top: the whole bar opens and closes them (main.js forwards a click anywhere on it to Obsidian's own
+   toggle), and the bar says how many it holds. The look of the bar is the theme's. */
+body.icor-props-folding .metadata-container.is-collapsed { cursor: pointer; }
+body.icor-props-folding .metadata-properties-heading { flex: 1 1 auto; cursor: pointer; }
+body.icor-props-folding .metadata-container.is-collapsed .metadata-properties-heading[data-icor-count]:not([data-icor-count=""])::after {
+  content: attr(data-icor-count);
+  margin-left: auto;
+  padding-left: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.7;
+}
+
+/* Under the note: the page becomes a column and the properties go last; the inline title stays first. Obsidian's
+   room to scroll past the end sits inside the editor, between the text and the properties, so it moves below them. */
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer { display: flex; flex-direction: column; padding-bottom: 40vh; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer > .cm-contentContainer { flex: none; min-height: 0; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer .cm-content { padding-bottom: 1.5em !important; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer > .metadata-container { order: 10; margin-top: 2em; }
+body.icor-props-bottom .markdown-source-view.mod-cm6 .cm-sizer > :not(.inline-title):not(.metadata-container):not(.cm-contentContainer) { order: 11; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer { display: flex; flex-direction: column; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer > .mod-header { display: contents; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer .metadata-container { order: 10; margin-top: 2em; }
+body.icor-props-bottom .markdown-reading-view .markdown-preview-sizer > .mod-footer { order: 11; }
+

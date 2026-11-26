@@ -1,6 +1,6 @@
 # Security Policy
 
-ICOR for Life - Interface is a local-only Obsidian plugin. It makes no network requests and it
+ICOR Interface is a local-only Obsidian plugin. It makes no network requests and it
 stores no credentials. That means its security surface is small, and this file says
 so plainly rather than implying a risk the plugin does not carry. It still has a
 surface, and we would rather hear about a problem early than read about it later.
@@ -52,7 +52,7 @@ We are not going to publish a version-support table we would not honour.
 
 ## Scope: what this plugin actually touches
 
-ICOR for Life - Interface changes how the vault LOOKS and nothing else. Measured
+ICOR Interface changes how the vault LOOKS and nothing else. Measured
 against the shipped `main.js` of v0.1.0:
 
 - **No network access.** The bundle contains zero `fetch`, `requestUrl` and
@@ -61,12 +61,17 @@ against the shipped `main.js` of v0.1.0:
 - **No credentials.** The plugin stores no API keys, tokens or passwords. It has
   no account, no login, and nothing to leak.
 - **Writes exactly two kinds of thing, both in the DOM.** Five class names on
-  `<body>`, and `data-icor-kind` plus four `--room-*` custom properties on
-  file-explorer folder rows. Every one is a value the INKLINE theme reads. The
+  `<body>`, and `data-icor-kind`, `data-icor-stage` plus four `--room-*`
+  custom properties on file-explorer folder rows. Every one is a value the INKLINE theme reads. The
   plugin writes no CSS and injects no stylesheet.
-- **Reads exactly two kinds of thing.** The vault's folder tree (names and
-  paths, never file contents) to offer folder suggestions, and Obsidian's own
-  icon registry to offer icons. It never reads a note.
+- **Reads exactly three kinds of thing.** The vault's folder tree (names and
+  paths, never file contents) to offer folder suggestions, Obsidian's own
+  icon registry to offer icons, and, since 0.10.0, one file:
+  `_System/schema.json`, parsed as JSON for its `stages` (which folders belong
+  to which ICOR stage, and the stage's colour) and its one-line folder
+  descriptions. It never reads a note and never writes the schema. A stage
+  colour reaches the DOM only as a plain hex colour (`#rgb` or `#rrggbb`);
+  anything else in the schema is ignored.
 - **Its own settings only**, through Obsidian's plugin settings API.
 
 **In scope, and we want to hear about it:**
@@ -76,8 +81,10 @@ against the shipped `main.js` of v0.1.0:
 - A folder path or label from settings that lands in the DOM unescaped and
   results in script execution or markup injection. Labels are serialised with
   `JSON.stringify` into a CSS string; a way past that is a bug we want.
-- Any read of a file's contents, or any write to the vault at all. This plugin
-  has no reason to do either.
+- Any read of a file's contents other than `_System/schema.json`, or any write
+  to the vault at all. This plugin has no reason to do either.
+- A schema value that reaches the DOM as anything but a hex colour, a folder
+  name, or text in the settings tab.
 
 **Note on the published artifact.** This repository distributes the plugin as
 hand-written CommonJS: `main.js` IS the source, unminified and unbundled, and
