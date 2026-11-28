@@ -65,6 +65,13 @@ GitHub; this file starts with 0.6.3.
 - ICOR for Life 3.0 rooms: no 03 WiP, 06 is the Outer World; a 3.0 vault keeps Obsidian's ribbon and file controls on
   first run.
 
+## [0.12.0] - 2026-11-28
+
+### Changed
+- The Workbench layout: the built-in stage map has the twelve folders of ICOR for Life 3.0. Control: 02 My Life, 03 Journal, 04 Notes, 05 Contacts, 06 Sources, 10 Files, 11 Databases. Output: 07 Planner, 08 Workbench. Refine now has a folder, 09 AI, and a colour (#FFB547). The colours still come from the vault's `_System/schema.json` first.
+- Icons for the new folders (08 Workbench: hammer, 09 AI: sparkles) and for the folders inside them (People, Companies, Meetings, Highlights, Done, Log, Reviews).
+- A vault without `stages` in its schema that still has the early 3.0 names (02 Inner World, 03 Outer World, 04 Assets, 05 Databases, 06 Planner) keeps its stage colours.
+
 ## [0.8.1] - 2026-11-02
 
 ### Fixed
