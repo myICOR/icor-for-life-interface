@@ -398,40 +398,44 @@ test('unload releases every row it claimed', async () => {
 });
 
 /* --------------------------------------------------------------- stages --
- * The ICOR stages colour the top folders (ICOR stages contract, Tom
- * 2026-11-23): Input 00 Daily Notes, 01 Inbox; Control 02 Inner World,
- * 03 Outer World, 04 Assets, 05 Databases; Output 06 Planner; Refine has no
- * folder. The colour comes from the vault's _System/schema.json `stages`, and
- * from a built-in map with the same values when the schema has none. Folders
- * are matched by their full name, never by the number in front. */
+ * The ICOR stages colour the top folders (the Workbench layout, 2026-11-28):
+ * Input 00 Daily Notes, 01 Inbox; Control 02 My Life, 03 Journal, 04 Notes,
+ * 05 Contacts, 06 Sources, 10 Files, 11 Databases; Output 07 Planner,
+ * 08 Workbench; Refine 09 AI. The colour comes from the vault's
+ * _System/schema.json `stages`, and from a built-in map with the same values
+ * when the schema has none. Folders are matched by their full name, never by
+ * the number in front. */
 
-const NEW_LAYOUT = ['00 Daily Notes', '01 Inbox', '02 Inner World', '02 Inner World/Journal', '02 Inner World/Journal/2026',
-  '03 Outer World', '04 Assets', '04 Assets/Images', '05 Databases', '06 Planner', 'Notes'];
+const NEW_LAYOUT = ['00 Daily Notes', '01 Inbox', '02 My Life', '03 Journal', '03 Journal/2026', '04 Notes', '04 Notes/Meetings',
+  '05 Contacts', '06 Sources', '07 Planner', '08 Workbench', '09 AI', '09 AI/Log', '10 Files', '10 Files/Images', '11 Databases', 'Notes'];
 const STAGES = (colors = {}) => ({
   input: { label: 'Input', color: colors.input || '#5271FC', folders: ['00 Daily Notes', '01 Inbox'] },
-  control: { label: 'Control', color: colors.control || '#52F49A', folders: ['02 Inner World', '03 Outer World', '04 Assets', '05 Databases'] },
-  output: { label: 'Output', color: colors.output || '#FD63FF', folders: ['06 Planner'] },
-  refine: { label: 'Refine', folders: [], about: 'no folder: the plugins (AI Chat, Connect, Focus) and the weekly review' },
+  control: { label: 'Control', color: colors.control || '#52F49A', folders: ['02 My Life', '03 Journal', '04 Notes', '05 Contacts', '06 Sources', '10 Files', '11 Databases'] },
+  output: { label: 'Output', color: colors.output || '#FD63FF', folders: ['07 Planner', '08 Workbench'] },
+  refine: { label: 'Refine', color: colors.refine || '#FFB547', folders: ['09 AI'] },
 });
 const FOLDER_NOTES = {
   '00 Daily Notes': 'your raw writing, one note a day',
   '01 Inbox': 'anything not yet sorted',
-  '02 Inner World': 'what you know and who you know',
-  '03 Outer World': 'what others made',
-  '04 Assets': 'files only',
-  '05 Databases': 'Objects.base and data too large for notes',
-  '06 Planner': 'tasks synced from your task apps',
+  '02 My Life': 'the map of your life',
+  '04 Notes': 'your knowledge',
+  '06 Sources': 'what others made',
+  '08 Workbench': 'work in progress',
+  '09 AI': "your AI's own record",
+  '10 Files': 'files only',
 };
 const STAGE_OF = {
   '00 Daily Notes': 'input', '01 Inbox': 'input',
-  '02 Inner World': 'control', '03 Outer World': 'control', '04 Assets': 'control', '05 Databases': 'control',
-  '06 Planner': 'output',
+  '02 My Life': 'control', '03 Journal': 'control', '04 Notes': 'control', '05 Contacts': 'control', '06 Sources': 'control',
+  '10 Files': 'control', '11 Databases': 'control',
+  '07 Planner': 'output', '08 Workbench': 'output',
+  '09 AI': 'refine',
 };
 const color = (r) => r.style.getPropertyValue('--room-color').toLowerCase();
 
 test('each new top folder gets its stage colour from the schema\'s stages, with an icon and its name minus the number', async () => {
   /* Colours the built-in map does not have, so the only way to get them is to have read the schema. */
-  const mine = { input: '#123456', control: '#00aa55', output: '#aa00aa' };
+  const mine = { input: '#123456', control: '#00aa55', output: '#aa00aa', refine: '#cc7700' };
   const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { schema: 1, folders: FOLDER_NOTES, stages: STAGES(mine) } });
   await plugin.onload(); ready();
   for (const [path, stage] of Object.entries(STAGE_OF)) {
@@ -449,18 +453,18 @@ test('each new top folder gets its stage colour from the schema\'s stages, with 
 test('a folder inside a stage folder takes the stage colour; a date folder does not', async () => {
   const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema: { folders: FOLDER_NOTES, stages: STAGES({ control: '#00aa55' }) } });
   await plugin.onload(); ready();
-  const journal = row(tree, '02 Inner World/Journal');
-  assert.equal(journal.getAttribute('data-icor-kind'), 'family');
-  assert.equal(color(journal), '#00aa55', 'Journal does not carry its stage\'s colour');
-  assert.match(journal.style.getPropertyValue('--room-icon'), /notebook-pen/, 'Journal lost its own icon');
-  assert.ok(!row(tree, '02 Inner World/Journal/2026').hasAttribute('data-icor-kind'), 'a date folder was coloured');
+  const meetings = row(tree, '04 Notes/Meetings');
+  assert.equal(meetings.getAttribute('data-icor-kind'), 'family');
+  assert.equal(color(meetings), '#00aa55', 'Meetings does not carry its stage\'s colour');
+  assert.match(meetings.style.getPropertyValue('--room-icon'), /messages-square/, 'Meetings lost its own icon');
+  assert.ok(!row(tree, '03 Journal/2026').hasAttribute('data-icor-kind'), 'a date folder was coloured');
 });
 
 test('a schema without stages falls back to the built-in stage map', async () => {
   for (const schema of [{ schema: 1, folders: FOLDER_NOTES }, undefined, 'not json at all']) {
     const { plugin, tree, ready } = loadPlugin({ folders: NEW_LAYOUT, schema });
     await plugin.onload(); ready();
-    const want = { input: '#5271fc', control: '#52f49a', output: '#fd63ff' };
+    const want = { input: '#5271fc', control: '#52f49a', output: '#fd63ff', refine: '#ffb547' };
     for (const [path, stage] of Object.entries(STAGE_OF)) {
       assert.equal(color(row(tree, path)), want[stage], `${path} is not ${stage} with schema ${JSON.stringify(schema)}`);
     }
@@ -483,14 +487,14 @@ test('a legacy schema that still says "rooms" works: its folders are coloured by
 
 test('"06 AI Team" (2.x) is never coloured as Output: folders match by full name, not by number', async () => {
   for (const schema of [{ folders: FOLDER_NOTES, stages: STAGES() }, undefined]) {
-    const { plugin, tree, ready } = loadPlugin({ folders: ['06 AI Team', '06 AI Team/Agents', '06 Planner', '03 WiP', '02 Somewhere Else'], schema });
+    const { plugin, tree, ready } = loadPlugin({ folders: ['06 AI Team', '06 AI Team/Agents', '07 Planner', '03 WiP', '02 Somewhere Else'], schema });
     await plugin.onload(); ready();
     for (const p of ['06 AI Team', '06 AI Team/Agents', '03 WiP', '02 Somewhere Else']) {
       const r = row(tree, p);
       assert.ok(!r.hasAttribute('data-icor-kind'), `${p} was claimed for a stage`);
       assert.equal(r.style.cssText, '', `${p} carries a colour`);
     }
-    assert.equal(color(row(tree, '06 Planner')), '#fd63ff');
+    assert.equal(color(row(tree, '07 Planner')), '#fd63ff');
   }
 });
 
@@ -499,18 +503,18 @@ test('a member\'s own folder settings win over the stage colour', async () => {
     folders: NEW_LAYOUT,
     schema: { folders: FOLDER_NOTES, stages: STAGES() },
     saved: { folders: [
-      { path: '02 Inner World', kind: 'room', color: '#ff0000', colorPaper: '#880000', icon: 'heart', label: 'Mine' },
-      { path: '06 Planner', kind: 'none' },
+      { path: '02 My Life', kind: 'room', color: '#ff0000', colorPaper: '#880000', icon: 'heart', label: 'Mine' },
+      { path: '07 Planner', kind: 'none' },
     ] },
   });
   await plugin.onload(); ready();
-  const inner = row(tree, '02 Inner World');
+  const inner = row(tree, '02 My Life');
   assert.equal(color(inner), '#ff0000', 'the stage colour beat the member\'s');
   assert.equal(inner.style.getPropertyValue('--room-label'), '"Mine"');
-  const planner = row(tree, '06 Planner');
+  const planner = row(tree, '07 Planner');
   assert.equal(planner.getAttribute('data-icor-kind'), 'none', 'the member switched the Planner off and it is still drawn');
   assert.equal(planner.style.cssText, '');
-  assert.equal(color(row(tree, '03 Outer World')), '#52f49a', 'the folders the member left alone lost their stage colour');
+  assert.equal(color(row(tree, '06 Sources')), '#52f49a', 'the folders the member left alone lost their stage colour');
 });
 
 test('a schema colour that is not a colour never reaches the row', async () => {
@@ -598,7 +602,7 @@ test('unload takes the stage colours off every row', async () => {
   assert.ok(tree.querySelectorAll('[data-icor-managed]').length >= 7, 'the stage folders were not claimed');
   plugin.onunload();
   assert.equal(tree.querySelectorAll('[data-icor-managed]').length, 0);
-  assert.ok(!row(tree, '02 Inner World').hasAttribute('data-icor-stage'), 'the stage attribute outlived the plugin');
+  assert.ok(!row(tree, '02 My Life').hasAttribute('data-icor-stage'), 'the stage attribute outlived the plugin');
 });
 
 /* ------------------------------------------------------------ positives -- */

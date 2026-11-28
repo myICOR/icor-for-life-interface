@@ -20,8 +20,9 @@
  *
  * THE ICOR STAGES (0.10.0, the ICOR stages contract, Tom 2026-11-23). The
  * top folders are grouped by ICOR stage, and each stage has one colour:
- * Input 00 Daily Notes, 01 Inbox; Control 02 Inner World, 03 Outer World,
- * 04 Assets, 05 Databases; Output 06 Planner; Refine has no folder. Which
+ * Input 00 Daily Notes, 01 Inbox; Control 02 My Life, 03 Journal, 04 Notes,
+ * 05 Contacts, 06 Sources, 10 Files, 11 Databases; Output 07 Planner,
+ * 08 Workbench; Refine 09 AI (the Workbench layout, 2026-11-28). Which
  * folder is in which stage, and the stage's colour, come from the vault's
  * _System/schema.json (`stages`), read once on load and again when the file
  * changes. A schema without `stages` (an older vault's, which still says
@@ -30,7 +31,7 @@
  * derived from that (paperTone), its label is its name minus the number, and
  * only its icon is looked up by name. Folders match by FULL NAME, never by
  * the number in front: a migrated 2.x vault may still hold "06 AI Team",
- * which is not the Output stage's "06 Planner".
+ * which is not the Control stage's "06 Sources".
  *
  * The theme still colours the same folders on its own when this plugin is
  * not installed (its fallback, rows with no data-icor-kind). With the plugin,
@@ -130,11 +131,11 @@ const PALETTE = [
 const SCHEMA_PATH = '_System/schema.json';
 const BUILTIN_STAGES = {
   input:   { label: 'Input',   color: '#5271FC', folders: ['00 Daily Notes', '01 Inbox'] },
-  control: { label: 'Control', color: '#52F49A', folders: ['02 Inner World', '03 Outer World', '04 Assets', '05 Databases'] },
-  output:  { label: 'Output',  color: '#FD63FF', folders: ['06 Planner'] },
-  refine:  { label: 'Refine',  folders: [], about: 'no folder: the plugins (AI Chat, Connect, Focus) and the weekly review' },
+  control: { label: 'Control', color: '#52F49A', folders: ['02 My Life', '03 Journal', '04 Notes', '05 Contacts', '06 Sources', '10 Files', '11 Databases'] },
+  output:  { label: 'Output',  color: '#FD63FF', folders: ['07 Planner', '08 Workbench'] },
+  refine:  { label: 'Refine',  color: '#FFB547', folders: ['09 AI'], about: '09 AI: what your AI did (Log), what it learned (Memory.md) and the weekly reviews (Reviews); the plugins (AI Chat, Connect, Focus) refine too' },
 };
-/* A vault from before the stage layout (2.x, early 3.0) whose schema has no
+/* A vault from before the Workbench layout (2.x, early 3.0) whose schema has no
  * `stages`: its top folders, by full name, in the stage they became. Never
  * used when the schema has `stages`. Not here, on purpose: "06 AI Team" (a
  * myPKA team) and "03 WiP", which are in no stage. */
@@ -145,12 +146,27 @@ const LEGACY_STAGE_FOLDERS = {
   '05 Assets': 'control',
   '06 Outer World': 'control',
   '07 Databases': 'control',
+  '02 Inner World': 'control',
+  '03 Outer World': 'control',
+  '04 Assets': 'control',
+  '05 Databases': 'control',
+  '06 Planner': 'output',
 };
 /* The one thing looked up per folder: its icon, by full name (Lucide ids, as
  * Obsidian ships them). A stage folder not listed here gets a plain folder. */
 const FOLDER_ICONS = {
   '00 Daily Notes': 'pencil',
   '01 Inbox': 'inbox',
+  '02 My Life': 'heart',
+  '03 Journal': 'notebook-pen',
+  '04 Notes': 'sprout',
+  '05 Contacts': 'users',
+  '06 Sources': 'globe',
+  '07 Planner': 'calendar-range',
+  '08 Workbench': 'hammer',
+  '09 AI': 'sparkles',
+  '10 Files': 'package',
+  '11 Databases': 'database',
   '02 Inner World': 'sprout',
   '03 Outer World': 'globe',
   '04 Assets': 'package',
@@ -179,6 +195,13 @@ const SUBFOLDER_ICONS = {
   'Images': 'image',
   'Audio': 'music',
   'Documents': 'file-text',
+  'People': 'user',
+  'Companies': 'building-2',
+  'Meetings': 'messages-square',
+  'Highlights': 'highlighter',
+  'Done': 'archive',
+  'Log': 'scroll-text',
+  'Reviews': 'refresh-cw',
 };
 
 /* The colour a stage colour becomes in the paper room: the same hue, darkened
@@ -1591,7 +1614,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
       new Setting(containerEl).setName('ICOR for Life folders, by stage').setHeading();
       const where = this.plugin.stageMap && this.plugin.stageMap.fromSchema ? 'from _System/schema.json' : 'ICOR for Life\'s own';
       new Setting(containerEl)
-        .setDesc(`Each ICOR stage gives its folders one colour (${where}): Input, Control, Output. Refine has no folder. Change any folder here; the change is stored and wins, the other folders keep their stage colour. Reset gives a folder its stage colour back.`);
+        .setDesc(`Each ICOR stage gives its folders one colour (${where}): Input, Control, Output, Refine. Change any folder here; the change is stored and wins, the other folders keep their stage colour. Reset gives a folder its stage colour back.`);
       for (const { path, defaults, stage, description } of icorFolders) {
         const override = this.plugin.folderConfig(path);
         this.renderRow(containerEl, override || defaults, {
@@ -1622,7 +1645,7 @@ class IcorInterfaceSettingTab extends PluginSettingTab {
 
     if (editablePath) {
       head.addText((t) => {
-        t.setPlaceholder('Folder path, e.g. 02 Inner World/Notes/Clients').setValue(cfg.path)
+        t.setPlaceholder('Folder path, e.g. 04 Notes/Clients').setValue(cfg.path)
           .onChange(async (v) => { await onChange({ path: v.trim() }); head.setName(v.trim() || 'New folder'); });
         new FolderSuggest(this.app, t.inputEl, async (path) => { await onChange({ path }); head.setName(path); });
       });

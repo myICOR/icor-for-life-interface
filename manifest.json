@@ -1,7 +1,7 @@
 {
   "id": "icor-for-life-interface",
   "name": "ICOR Interface",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "minAppVersion": "1.5.0",
   "description": "The vault's look in one place: the INKLINE look, where properties show, the ribbon and app controls as switches, a collapsible status bar, a Mermaid viewer, and folder colours, icons and labels by ICOR stage. Part of the ICOR for Life suite.",
   "author": "myICOR",
